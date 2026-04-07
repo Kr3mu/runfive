@@ -26,5 +26,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: api/go.mod
+      - run: go mod tidy
+        working-directory: api
       - run: go build ./...
         working-directory: api
