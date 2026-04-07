@@ -1,0 +1,21 @@
+name: Web Build
+
+on:
+  push:
+    paths:
+      - "website/**"
+  pull_request:
+    paths:
+      - "website/**"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run build
