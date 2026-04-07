@@ -22,6 +22,28 @@
 
 runfive is a FiveM server management panel built for server owners and developers who want full control over their infrastructure.
 
+## Quick Start
+
+Download the latest binary from [Releases](https://github.com/Kr3mu/runfive/releases) and run it:
+
+```bash
+./runfive
+```
+
+Open `http://localhost:5000` — done.
+
+## Development
+
+> Requires [Go 1.24+](https://go.dev/dl/) and [Bun](https://bun.sh/)
+
+```bash
+# build the web panel
+cd website && bun install && bun run build
+
+# start the server
+cd ../api && go run .
+```
+
 ## Contributing
 
 Contributions are welcome. Please open an issue first to discuss what you'd like to change.
