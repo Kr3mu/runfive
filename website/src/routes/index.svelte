@@ -8,19 +8,23 @@
     import Check from "@lucide/svelte/icons/check";
     import X from "@lucide/svelte/icons/x";
 
-    type LoginState = "idle" | "loading" | "success" | "error";
+    type LoginState = "idle" | "loading" | "success" | "transition" | "error";
 
     let username = $state("");
     let password = $state("");
     let showPassword = $state(false);
     let loginState = $state<LoginState>("idle");
     let errorMessage = $state("");
+    let logoEl = $state<HTMLImageElement | null>(null);
+    let logoRect = $state<{ top: number; left: number; width: number } | null>(null);
 
     const logoSrc = $derived(
         theme.value === "dark" ? "/logo.webp" : "/logo-light.webp",
     );
 
-    const isSubmitting = $derived(loginState === "loading");
+    const isSubmitting = $derived(
+        loginState === "loading" || loginState === "success" || loginState === "transition",
+    );
 
     function handleLogin(e: SubmitEvent): void {
         e.preventDefault();
@@ -33,7 +37,15 @@
         setTimeout((): void => {
             if (username === "admin" && password === "admin") {
                 loginState = "success";
-                // TODO: navigate to dashboard
+
+                setTimeout((): void => {
+                    if (logoEl) {
+                        const rect = logoEl.getBoundingClientRect();
+                        logoRect = { top: rect.top, left: rect.left, width: rect.width };
+                    }
+                    loginState = "transition";
+                    // TODO: navigate to dashboard after animation
+                }, 800);
             } else {
                 loginState = "error";
                 errorMessage = "Invalid username or password";
@@ -51,7 +63,25 @@
     }
 </script>
 
-<main class="relative flex min-h-svh items-center justify-center bg-background px-4">
+{#if loginState === "transition" && logoRect}
+    <div class="fixed inset-0 z-50 bg-background">
+        <img
+            src={logoSrc}
+            alt="runfive"
+            class="logo-transition"
+            style="
+                --start-top: {logoRect.top}px;
+                --start-left: {logoRect.left}px;
+                --start-width: {logoRect.width}px;
+            "
+        />
+    </div>
+{/if}
+
+<main
+    class="relative flex min-h-svh items-center justify-center bg-background px-4 transition-opacity duration-500"
+    class:opacity-0={loginState === "transition"}
+>
     <button
         onclick={theme.toggle}
         class="absolute top-6 right-6 text-muted-foreground transition-colors hover:text-foreground"
@@ -67,6 +97,7 @@
     <div class="w-full max-w-sm">
         <div class="mb-10 flex flex-col items-center">
             <img
+                bind:this={logoEl}
                 src={logoSrc}
                 alt="runfive"
                 class="mb-3 w-52"
@@ -183,5 +214,44 @@
 
     :global(.animate-shake) {
         animation: shake 0.5s ease-in-out;
+    }
+
+    .logo-transition {
+        position: absolute;
+        top: var(--start-top);
+        left: var(--start-left);
+        width: var(--start-width);
+        animation: logo-fly 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    }
+
+    @keyframes logo-fly {
+        0% {
+            top: var(--start-top);
+            left: var(--start-left);
+            width: var(--start-width);
+            transform: translate(0, 0);
+            opacity: 1;
+        }
+        40% {
+            top: 50%;
+            left: 50%;
+            width: 280px;
+            transform: translate(-50%, -50%) scale(1.15);
+            opacity: 1;
+        }
+        65% {
+            top: 50%;
+            left: 50%;
+            width: 280px;
+            transform: translate(-50%, -50%) scale(1.1);
+            opacity: 1;
+        }
+        100% {
+            top: 50%;
+            left: 120%;
+            width: 280px;
+            transform: translate(-50%, -50%) scale(1.1);
+            opacity: 0;
+        }
     }
 </style>
