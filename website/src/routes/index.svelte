@@ -1,5 +1,6 @@
 <script lang="ts">
     import { theme } from "$lib/theme.svelte";
+    import Logo from "$lib/components/logo.svelte";
     import Sun from "@lucide/svelte/icons/sun";
     import Moon from "@lucide/svelte/icons/moon";
     import Eye from "@lucide/svelte/icons/eye";
@@ -15,12 +16,8 @@
     let showPassword = $state(false);
     let loginState = $state<LoginState>("idle");
     let errorMessage = $state("");
-    let logoEl = $state<HTMLImageElement | null>(null);
+    let logoEl = $state<HTMLElement | null>(null);
     let logoRect = $state<{ top: number; left: number; width: number } | null>(null);
-
-    const logoSrc = $derived(
-        theme.value === "dark" ? "/logo.webp" : "/logo-light.webp",
-    );
 
     const isSubmitting = $derived(
         loginState === "loading" || loginState === "success" || loginState === "transition",
@@ -65,16 +62,16 @@
 
 {#if loginState === "transition" && logoRect}
     <div class="fixed inset-0 z-50 bg-background">
-        <img
-            src={logoSrc}
-            alt="runfive"
+        <div
             class="logo-transition"
             style="
                 --start-top: {logoRect.top}px;
                 --start-left: {logoRect.left}px;
                 --start-width: {logoRect.width}px;
             "
-        />
+        >
+            <Logo class="w-full" />
+        </div>
     </div>
 {/if}
 
@@ -96,13 +93,13 @@
 
     <div class="w-full max-w-sm">
         <div class="mb-10 flex flex-col items-center">
-            <img
+            <div
                 bind:this={logoEl}
-                src={logoSrc}
-                alt="runfive"
                 class="mb-3 w-52"
                 class:animate-pulse={loginState === "loading"}
-            />
+            >
+                <Logo class="w-full" />
+            </div>
             <p class="text-sm tracking-wide text-muted-foreground">
                 Server Management
             </p>

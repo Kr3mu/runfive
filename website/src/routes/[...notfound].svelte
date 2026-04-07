@@ -1,9 +1,5 @@
 <script lang="ts">
-    import { theme } from "$lib/theme.svelte";
-
-    const logoSrc = $derived(
-        theme.value === "dark" ? "/logo.webp" : "/logo-light.webp",
-    );
+    import Logo from "$lib/components/logo.svelte";
 </script>
 
 <main class="relative flex min-h-svh items-center justify-center overflow-hidden bg-background">
@@ -14,11 +10,7 @@
     <div class="speed-line speed-line-5"></div>
 
     <div class="relative z-10 flex flex-col items-center">
-        <img
-            src={logoSrc}
-            alt="runfive"
-            class="logo-entrance mb-8 w-72 md:w-96"
-        />
+        <Logo class="logo-entrance mb-8 w-72 md:w-96" />
 
         <div class="mb-6">
             <h1
@@ -36,6 +28,7 @@
 
         <a
             href="/"
+            data-view-transition
             class="go-back group flex items-center gap-2 rounded-md border border-border bg-card px-5 py-2.5 text-sm font-medium text-foreground transition-all hover:border-primary hover:text-primary"
         >
             <svg

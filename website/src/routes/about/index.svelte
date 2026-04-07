@@ -5,6 +5,6 @@
     <div class="flex flex-col items-center gap-6">
         <h1 class="text-4xl font-heading font-bold text-foreground">About</h1>
         <p class="text-muted-foreground">runfive Admin Panel v0.1</p>
-        <a href="/" class="text-primary hover:underline">Back to Home</a>
+        <a href="/" data-view-transition class="text-primary hover:underline">Back to Home</a>
     </div>
 </main>
