@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - "website/**"
+      - ".github/workflows/web.yml"
   pull_request:
     paths:
       - "website/**"
