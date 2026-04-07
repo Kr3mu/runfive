@@ -4,20 +4,27 @@ on:
   push:
     paths:
       - "api/**"
+      - "website/**"
       - ".github/workflows/api.yml"
   pull_request:
     paths:
       - "api/**"
+      - "website/**"
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: api
     steps:
       - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+        working-directory: website
+      - run: bun run build
+        working-directory: website
+
       - uses: actions/setup-go@v5
         with:
           go-version-file: api/go.mod
       - run: go build ./...
+        working-directory: api

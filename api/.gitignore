@@ -1,2 +1,4 @@
 go.sum
 tmp/
+internal/spa/dist/*
+!internal/spa/dist/.gitkeep

@@ -6,6 +6,10 @@ import path from "path";
 
 export default defineConfig({
     plugins: [tailwindcss(), svelte(), router()],
+    build: {
+        outDir: path.resolve("../api/internal/spa/dist"),
+        emptyOutDir: true,
+    },
     server: {
         port: 3000,
     },

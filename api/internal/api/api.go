@@ -2,6 +2,7 @@ package api
 
 import (
 	v1 "github.com/Kr3mu/runfive/internal/api/v1"
+	"github.com/Kr3mu/runfive/internal/spa"
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/helmet"
 	"github.com/gofiber/fiber/v3/middleware/logger"
@@ -14,6 +15,7 @@ func New(appConfig fiber.Config) *fiber.App {
 	app.Use(helmet.New())
 
 	SetupRoutes(app)
+	spa.Register(app)
 
 	return app
 }
