@@ -1,20 +1,25 @@
 package api
 
 import (
-	"github.com/danielgtaylor/huma/v2"
-	"github.com/danielgtaylor/huma/v2/adapters/humafiber"
+	v1 "github.com/Kr3mu/runfive/internal/api/v1"
 	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/helmet"
+	"github.com/gofiber/fiber/v3/middleware/logger"
 )
 
-func New(appConfig fiber.Config, humaConfig huma.Config) *fiber.App {
+func New(appConfig fiber.Config) *fiber.App {
 	app := fiber.New(appConfig)
-	humaApp := humafiber.New(app, humaConfig)
 
-	SetupRoutes(&humaApp)
+	app.Use(logger.New())
+	app.Use(helmet.New())
+
+	SetupRoutes(app)
 
 	return app
 }
 
-func SetupRoutes(app *huma.API) {
+func SetupRoutes(app *fiber.App) {
+	v1Group := app.Group("/v1")
 
+	v1.RegisterRouter(v1Group)
 }
