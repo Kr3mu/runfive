@@ -1,7 +1,7 @@
 <div align="center">
 
 
-<img src="website/public/logo-light.webp" alt="runfive" width="420" />
+<img src="brand/runfive_logo.svg" alt="runfive" width="420" />
 
 
 **fivem admin panel. open source. done right.**
