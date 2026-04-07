@@ -1,7 +1,7 @@
 <script lang="ts">
     import "./app.css";
 
-    import * as Select from "$lib/components/ui/select/index.ts";
+    import * as Select from "$lib/components/ui/select";
 
     const fruits = [
         { value: "apple", label: "Apple" },
