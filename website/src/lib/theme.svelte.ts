@@ -46,7 +46,7 @@ function applyTheme(value: Theme, animate: boolean = false): void {
 }
 
 let current = $state<Theme>(getInitialTheme());
-applyTheme(current);
+applyTheme(getInitialTheme());
 
 export const theme = {
     get value(): Theme {
