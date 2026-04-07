@@ -154,6 +154,11 @@
   animation: slide-from-right 0.25s ease-in-out;
 }
 
+::view-transition-old(footer),
+::view-transition-new(footer) {
+  animation: none;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

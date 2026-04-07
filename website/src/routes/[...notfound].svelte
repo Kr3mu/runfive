@@ -2,7 +2,7 @@
     import Logo from "$lib/components/logo.svelte";
 </script>
 
-<main class="relative flex min-h-svh items-center justify-center overflow-hidden bg-background">
+<main class="relative flex flex-1 items-center justify-center overflow-hidden bg-background">
     <div class="speed-line speed-line-1"></div>
     <div class="speed-line speed-line-2"></div>
     <div class="speed-line speed-line-3"></div>
@@ -114,7 +114,7 @@
         }
     }
 
-    .logo-entrance {
+    :global(.logo-entrance) {
         animation: slide-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
     }
 

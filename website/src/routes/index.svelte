@@ -1,6 +1,7 @@
 <script lang="ts">
     import { theme } from "$lib/theme.svelte";
     import Logo from "$lib/components/logo.svelte";
+    import Cfxre from "$lib/components/icons/cfxre.svelte";
     import Sun from "@lucide/svelte/icons/sun";
     import Moon from "@lucide/svelte/icons/moon";
     import Eye from "@lucide/svelte/icons/eye";
@@ -76,7 +77,7 @@
 {/if}
 
 <main
-    class="relative flex min-h-svh items-center justify-center bg-background px-4 transition-opacity duration-500"
+    class="relative flex flex-1 items-center justify-center bg-background px-4 transition-opacity duration-500"
     class:opacity-0={loginState === "transition"}
 >
     <button
@@ -190,9 +191,7 @@
             onclick={handleCfxLogin}
             class="flex h-10 w-full items-center justify-center gap-2.5 rounded-md bg-[#F40552] text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
         >
-            <svg viewBox="0 0 95 64" fill="none" class="h-4 w-auto">
-                <path fill="currentColor" d="M64.4992 0H52.0201L53.054 12.8535H41.6446L42.6785 0H30.3064L0 64H37.4908L38.7209 48.7933H55.9599L57.19 64H94.7877L64.4813 0H64.4992ZM39.5944 38.2039L41.2167 18.2017H53.4997L55.122 38.2039H39.5944Z"/>
-            </svg>
+            <Cfxre class="h-4 w-auto" />
             Sign in with Cfx.re
         </button>
 
