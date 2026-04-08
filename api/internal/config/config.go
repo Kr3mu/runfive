@@ -13,6 +13,12 @@ import (
 )
 
 // Config holds all runtime configuration for the application.
+//
+// TODO: Add ServersDir field (path to the servers/ directory). On startup,
+// scan this directory for subdirectories containing server.toml files.
+// Each TOML defines a managed FiveM server instance (name, port, paths,
+// resource config, etc.). Needs a typed ServerConfig struct for the TOML
+// schema and a loader that returns []ServerConfig keyed by directory name.
 type Config struct {
 	// HTTP listen port
 	Port string

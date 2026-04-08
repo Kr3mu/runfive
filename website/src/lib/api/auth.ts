@@ -38,6 +38,8 @@ interface ProviderInfo {
 }
 
 /** Authenticated user profile returned by GET /v1/auth/me. */
+// TODO: Add serverRoles field (Record<serverId, Role>) once RBAC lands.
+// Server IDs come from the TOML directory names, not the DB.
 export interface AuthUser {
   /** User database ID */
   id: number;

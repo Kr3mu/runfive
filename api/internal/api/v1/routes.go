@@ -10,6 +10,21 @@ import (
 )
 
 // RegisterRouter mounts all v1 API routes on the provided router group.
+//
+// TODO: Add server management routes under /v1/servers with RBAC middleware.
+// Servers are file-based (TOML configs in a directory structure), not DB rows.
+// The API reads available servers from the TOML directory at startup.
+//   - POST   /v1/servers              (owner only: create server dir + TOML, install server)
+//   - GET    /v1/servers              (list servers the user has access to, filtered by RBAC)
+//   - GET    /v1/servers/:id          (requires server view permission)
+//   - PUT    /v1/servers/:id/roles    (owner only: assign user roles per server)
+//   - DELETE /v1/servers/:id          (owner only: remove server dir)
+// Each server endpoint should use RequirePermission middleware to check
+// the user's role on that specific server.
+//
+// TODO: Add TOML config reader that scans the servers/ directory structure
+// and parses each server.toml into a typed Go struct. Needs a file watcher
+// or reload endpoint to pick up config changes without restart.
 func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *auth.CfxAuth, fe *auth.FieldEncryptor) {
 	authHandler := NewAuthHandler(db, sm, cfx, fe)
 	authGroup := r.Group("/auth")

@@ -7,6 +7,13 @@ package models
 import "gorm.io/gorm"
 
 // User represents an authenticated user account.
+//
+// TODO: Add server-scoped RBAC. Servers are file-based (TOML configs in a
+// directory structure, not DB rows). Users need a mapping of user -> server ID
+// (from TOML) -> role, stored in DB (e.g. UserServerRole join table).
+// Roles define granular permissions per server (view, manage players, manage
+// resources, console access, etc.). IsOwner remains as the global superadmin
+// bypass that has access to all servers.
 type User struct {
 	gorm.Model
 	// Username is the unique login name chosen during registration.

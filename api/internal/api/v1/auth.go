@@ -140,6 +140,10 @@ func (h *AuthHandler) Logout(c fiber.Ctx) error {
 // Me returns the currently authenticated user's profile.
 //
 // GET /v1/auth/me
+//
+// TODO: Include the user's server-scoped roles/permissions in the response
+// so the frontend can render UI based on what the user is allowed to do
+// per server (e.g. hide admin tabs, disable actions).
 func (h *AuthHandler) Me(c fiber.Ctx) error {
 	user := auth.GetUser(c)
 	if user == nil {

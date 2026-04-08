@@ -39,6 +39,11 @@
     const isAuthenticated = $derived(authQuery.data !== undefined && authQuery.data !== null);
     const isAuthLoading = $derived(authQuery.isLoading);
 
+    // TODO: Once RBAC is implemented, add per-server permission checks to
+    // dashboard routes. Currently any authenticated user sees everything.
+    // Redirect users to a "no access" page if they lack permission for
+    // the requested server.
+
     $effect((): void => {
         if (isAuthLoading) return;
         if (isDashboard && !isAuthenticated) {

@@ -18,6 +18,9 @@ type RegisterRequest struct {
 }
 
 // MeResponse is returned by GET /v1/auth/me.
+//
+// TODO: Add a ServerRoles field that maps server ID (TOML dir name) ->
+// role/permissions, so the frontend knows what the user can do per server.
 type MeResponse struct {
 	// User database ID
 	ID uint `json:"id"`

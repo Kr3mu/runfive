@@ -30,6 +30,10 @@ const (
 // On valid session: sets c.Locals("user") to *models.User and
 // c.Locals("sessionToken") to the raw token string, then calls next.
 // On missing/invalid session: returns 401.
+//
+// TODO: Add RequirePermission(server, permission) middleware that checks the
+// user's role on a specific server. Should load the user-server-role mapping
+// and verify the required permission before calling next. IsOwner bypasses.
 func RequireAuth(sm *SessionManager, db *gorm.DB) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		userID, token, err := sm.LoadSession(c)
