@@ -1,3 +1,4 @@
+// Package spa serves the single-page application from an embedded filesystem.
 package spa
 
 import (
@@ -76,15 +77,16 @@ func Register(app *fiber.App) {
 
 		c.Set("Content-Type", contentType(path))
 
-		if path == "index.html" {
+		switch {
+		case path == "index.html":
 			if c.Get("If-None-Match") == indexETag {
 				return c.SendStatus(304)
 			}
 			c.Set("Cache-Control", "no-cache")
 			c.Set("ETag", indexETag)
-		} else if strings.HasPrefix(path, "assets/") {
+		case strings.HasPrefix(path, "assets/"):
 			c.Set("Cache-Control", "public, max-age=31536000, immutable")
-		} else {
+		default:
 			c.Set("Cache-Control", "public, max-age=86400")
 		}
 

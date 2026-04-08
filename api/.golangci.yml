@@ -1,0 +1,32 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - gocritic
+    - revive
+    - gosec
+    - unconvert
+    - unparam
+    - misspell
+    - prealloc
+    - nilerr
+    - errorlint
+    - bodyclose
+    - noctx
+
+linters-settings:
+  revive:
+    rules:
+      - name: exported
+        disabled: true
+  gocritic:
+    disabled-checks:
+      - commentFormatting
