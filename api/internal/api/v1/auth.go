@@ -296,17 +296,10 @@ func (h *AuthHandler) CfxCallback(c fiber.Ctx) error {
 	}
 
 	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-		user = models.User{
-			Username:     userData.Username,
-			CfxID:        &userData.ID,
-			CfxUsername:   &userData.Username,
-			CfxAvatarURL: &avatarURL,
-			CfxAPIKey:    encryptedKey,
-		}
-		if err := h.db.Create(&user).Error; err != nil {
-			return c.Redirect().To("/?error=create_failed")
-		}
-	} else {
+		return c.Redirect().To("/?error=account_not_found")
+	}
+
+	{
 		h.db.Model(&user).Updates(map[string]interface{}{
 			"cfx_username":   userData.Username,
 			"cfx_avatar_url": avatarURL,
