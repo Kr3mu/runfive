@@ -162,6 +162,8 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
   }
 
   body {
@@ -170,5 +172,37 @@
 
   html {
     @apply font-sans;
+  }
+
+  /* Webkit scrollbar (Chrome, Edge, Safari) */
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 999px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--muted-foreground);
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* Console-specific: even more subtle */
+  .console-scroll::-webkit-scrollbar-thumb {
+    background: oklch(1 0 0 / 8%);
+  }
+
+  .console-scroll::-webkit-scrollbar-thumb:hover {
+    background: oklch(1 0 0 / 15%);
   }
 }
