@@ -83,6 +83,10 @@
     }
 </script>
 
+{#snippet sortIcon(key: SortKey)}
+    {@const Icon = getSortIcon(key)}<Icon size={10} />
+{/snippet}
+
 <div class="flex h-full flex-col overflow-hidden">
     <!-- Toolbar -->
     <div class="flex h-7 shrink-0 items-center justify-between border-b border-border/50 bg-card px-2">
@@ -148,7 +152,7 @@
                         <th class="py-2 pl-2 pr-3">
                             <button onclick={() => toggleSort("name")} class="flex items-center gap-1 text-[11px] font-semibold tracking-wider text-muted-foreground/60 uppercase transition-colors hover:text-foreground">
                                 Name
-                                <svelte:component this={getSortIcon("name")} size={10} />
+                                {@render sortIcon("name")}
                             </button>
                         </th>
                         <th class="px-3 py-2">
@@ -160,19 +164,19 @@
                         <th class="px-3 py-2">
                             <button onclick={() => toggleSort("ping")} class="flex items-center gap-1 text-[11px] font-semibold tracking-wider text-muted-foreground/60 uppercase transition-colors hover:text-foreground">
                                 Ping
-                                <svelte:component this={getSortIcon("ping")} size={10} />
+                                {@render sortIcon("ping")}
                             </button>
                         </th>
                         <th class="px-3 py-2">
                             <button onclick={() => toggleSort("connectedSince")} class="flex items-center gap-1 text-[11px] font-semibold tracking-wider text-muted-foreground/60 uppercase transition-colors hover:text-foreground">
                                 Session
-                                <svelte:component this={getSortIcon("connectedSince")} size={10} />
+                                {@render sortIcon("connectedSince")}
                             </button>
                         </th>
                         <th class="hidden px-3 py-2 lg:table-cell">
                             <button onclick={() => toggleSort("allTimeConnected")} class="flex items-center gap-1 text-[11px] font-semibold tracking-wider text-muted-foreground/60 uppercase transition-colors hover:text-foreground">
                                 Total
-                                <svelte:component this={getSortIcon("allTimeConnected")} size={10} />
+                                {@render sortIcon("allTimeConnected")}
                             </button>
                         </th>
                         <th class="px-3 py-2 text-right">

@@ -1,5 +1,5 @@
 import type { Component } from "svelte";
-import type { GridLayoutItem } from "$lib/components/dashboard/grid-stack.svelte";
+import type { GridLayoutItem } from "$lib/types/grid-layout";
 
 export interface WidgetDefinition {
     id: string;

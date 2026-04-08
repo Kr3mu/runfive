@@ -195,7 +195,7 @@
                     class="group flex w-full items-center gap-2.5 rounded-md px-2.5 py-[7px] text-muted-foreground/50 transition-colors hover:bg-primary/8 hover:text-primary"
                 >
                     {#if widgetIconMap[widget.icon]}
-                        <svelte:component this={widgetIconMap[widget.icon]} size={15} strokeWidth={1.8} class="shrink-0" />
+                        {@const WidgetIcon = widgetIconMap[widget.icon]}<WidgetIcon size={15} strokeWidth={1.8} class="shrink-0" />
                     {:else}
                         <Plus size={15} strokeWidth={1.8} class="shrink-0" />
                     {/if}

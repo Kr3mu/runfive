@@ -5,7 +5,7 @@
     import PlayerList from "$lib/components/dashboard/player-list.svelte";
     import { dashboardState } from "$lib/dashboard-state.svelte";
     import { getWidgetDef } from "$lib/widget-registry";
-    import type { GridLayoutItem } from "$lib/components/dashboard/grid-stack.svelte";
+    import type { GridLayoutItem } from "$lib/types/grid-layout";
 
     const widgetMap: Record<string, { component: typeof Console; title: string }> = {
         console: { component: Console, title: "Console" },

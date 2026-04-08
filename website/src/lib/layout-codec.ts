@@ -13,7 +13,7 @@
  *   6 widgets -> 22 chars
  */
 
-import type { GridLayoutItem } from "$lib/components/dashboard/grid-stack.svelte";
+import type { GridLayoutItem } from "$lib/types/grid-layout";
 
 // -- Widget type registry ----------------------------------------------
 // Order matters — indices are the encoded IDs. Append new types at the end.

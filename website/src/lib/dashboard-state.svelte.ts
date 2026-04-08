@@ -1,6 +1,6 @@
 /** Shared dashboard state — editing mode, layout management. */
 
-import type { GridLayoutItem } from "$lib/components/dashboard/grid-stack.svelte";
+import type { GridLayoutItem } from "$lib/types/grid-layout";
 import { createWidgetItem } from "$lib/widget-registry";
 
 const DEFAULT_LAYOUT: GridLayoutItem[] = [
