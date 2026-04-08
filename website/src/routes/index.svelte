@@ -42,7 +42,7 @@
                         logoRect = { top: rect.top, left: rect.left, width: rect.width };
                     }
                     loginState = "transition";
-                    // TODO: navigate to dashboard after animation
+                    setTimeout(() => (window.location.href = "/dashboard"), 1200);
                 }, 800);
             } else {
                 loginState = "error";
