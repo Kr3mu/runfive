@@ -26,6 +26,8 @@ function applyTheme(value: Theme, animate: boolean = false): void {
         `;
         document.body.appendChild(overlay);
 
+        overlay.getBoundingClientRect();  // Required by firefox - to force reflow
+
         requestAnimationFrame((): void => {
             overlay.style.transform = "translateX(0)";
 
