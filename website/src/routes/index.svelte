@@ -1,67 +1,87 @@
 <script lang="ts">
-    import { theme } from "$lib/theme.svelte";
-    import Logo from "$lib/components/logo.svelte";
-    import Cfxre from "$lib/components/icons/cfxre.svelte";
-    import Sun from "@lucide/svelte/icons/sun";
-    import Moon from "@lucide/svelte/icons/moon";
-    import Eye from "@lucide/svelte/icons/eye";
-    import EyeOff from "@lucide/svelte/icons/eye-off";
-    import LoaderCircle from "@lucide/svelte/icons/loader-circle";
-    import Check from "@lucide/svelte/icons/check";
-    import X from "@lucide/svelte/icons/x";
+    import { theme } from '$lib/theme.svelte';
+    import Logo from '$lib/components/logo.svelte';
+    import Cfxre from '$lib/components/icons/cfxre.svelte';
+    import Sun from '@lucide/svelte/icons/sun';
+    import Moon from '@lucide/svelte/icons/moon';
+    import Eye from '@lucide/svelte/icons/eye';
+    import EyeOff from '@lucide/svelte/icons/eye-off';
+    import LoaderCircle from '@lucide/svelte/icons/loader-circle';
+    import Check from '@lucide/svelte/icons/check';
+    import X from '@lucide/svelte/icons/x';
+    import { login, register, fetchSetupStatus } from '$lib/api/auth';
 
-    type LoginState = "idle" | "loading" | "success" | "transition" | "error";
+    type LoginState = 'idle' | 'loading' | 'success' | 'transition' | 'error';
 
-    let username = $state("");
-    let password = $state("");
+    let username = $state('');
+    let password = $state('');
     let showPassword = $state(false);
-    let loginState = $state<LoginState>("idle");
-    let errorMessage = $state("");
+    let loginState = $state<LoginState>('idle');
+    let errorMessage = $state('');
     let logoEl = $state<HTMLElement | null>(null);
     let logoRect = $state<{ top: number; left: number; width: number } | null>(null);
+    let needsSetup = $state<boolean | null>(null);
 
     const isSubmitting = $derived(
-        loginState === "loading" || loginState === "success" || loginState === "transition",
+        loginState === 'loading' || loginState === 'success' || loginState === 'transition',
     );
+
+    const buttonLabel = $derived(needsSetup ? 'Create Account' : 'Sign in');
+
+    $effect((): void => {
+        fetchSetupStatus()
+            .then((status): void => {
+                needsSetup = status.needsSetup;
+            })
+            .catch((): void => {
+                needsSetup = false;
+            });
+    });
 
     function handleLogin(e: SubmitEvent): void {
         e.preventDefault();
         if (isSubmitting) return;
+        if (needsSetup === null) return;
 
-        loginState = "loading";
-        errorMessage = "";
+        loginState = 'loading';
+        errorMessage = '';
 
-        // TODO: replace with actual auth call
-        setTimeout((): void => {
-            if (username === "admin" && password === "admin") {
-                loginState = "success";
+        const action: Promise<unknown> = needsSetup
+            ? register(username, password)
+            : login(username, password);
 
+        action
+            .then((): void => {
+                loginState = 'success';
                 setTimeout((): void => {
                     if (logoEl) {
-                        const rect = logoEl.getBoundingClientRect();
+                        const rect: DOMRect = logoEl.getBoundingClientRect();
                         logoRect = { top: rect.top, left: rect.left, width: rect.width };
                     }
-                    loginState = "transition";
-                    setTimeout(() => (window.location.href = "/dashboard"), 1200);
+                    loginState = 'transition';
+                    setTimeout((): void => {
+                        window.location.href = '/dashboard';
+                    }, 1200);
                 }, 800);
-            } else {
-                loginState = "error";
-                errorMessage = "Invalid username or password";
+            })
+            .catch((err: unknown): void => {
+                loginState = 'error';
+                errorMessage =
+                    err instanceof Error ? err.message : 'Authentication failed';
                 setTimeout((): void => {
-                    loginState = "idle";
+                    loginState = 'idle';
                 }, 2000);
-            }
-        }, 1500);
+            });
     }
 
     function handleCfxLogin(): void {
         if (isSubmitting) return;
-        loginState = "loading";
-        // TODO: redirect to Cfx.re OAuth
+        loginState = 'loading';
+        window.location.href = '/v1/auth/cfx';
     }
 </script>
 
-{#if loginState === "transition" && logoRect}
+{#if loginState === 'transition' && logoRect}
     <div class="fixed inset-0 z-50 bg-background">
         <div
             class="logo-transition"
@@ -78,14 +98,14 @@
 
 <main
     class="relative flex flex-1 items-center justify-center bg-background px-4 transition-opacity duration-500"
-    class:opacity-0={loginState === "transition"}
+    class:opacity-0={loginState === 'transition'}
 >
     <button
         onclick={theme.toggle}
         class="absolute top-6 right-6 text-muted-foreground transition-colors hover:text-foreground"
         aria-label="Toggle theme"
     >
-        {#if theme.value === "dark"}
+        {#if theme.value === 'dark'}
             <Sun size={18} />
         {:else}
             <Moon size={18} />
@@ -97,12 +117,16 @@
             <div
                 bind:this={logoEl}
                 class="mb-3 w-52"
-                class:animate-pulse={loginState === "loading"}
+                class:animate-pulse={loginState === 'loading'}
             >
                 <Logo class="w-full" />
             </div>
             <p class="text-sm tracking-wide text-muted-foreground">
-                Server Management
+                {#if needsSetup}
+                    Initial Setup
+                {:else}
+                    Server Management
+                {/if}
             </p>
         </div>
 
@@ -135,9 +159,9 @@
                 <div class="relative">
                     <input
                         id="password"
-                        type={showPassword ? "text" : "password"}
+                        type={showPassword ? 'text' : 'password'}
                         bind:value={password}
-                        autocomplete="current-password"
+                        autocomplete={needsSetup ? 'new-password' : 'current-password'}
                         disabled={isSubmitting}
                         class="h-10 w-full rounded-md border bg-background pr-10 pl-3 text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground/50 focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50 {loginState === 'error' ? 'border-destructive' : 'border-border'}"
                         placeholder="••••••••"
@@ -146,9 +170,7 @@
                         type="button"
                         onclick={() => (showPassword = !showPassword)}
                         class="absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
-                        aria-label={showPassword
-                            ? "Hide password"
-                            : "Show password"}
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
                     >
                         {#if showPassword}
                             <EyeOff size={16} />
@@ -161,39 +183,41 @@
 
             <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || needsSetup === null}
                 class="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-md font-heading text-sm font-semibold tracking-wide transition-all disabled:cursor-not-allowed {loginState === 'success' ? 'bg-emerald-500 text-white' : loginState === 'error' ? 'animate-shake bg-red-600 text-white' : 'bg-primary text-primary-foreground hover:opacity-90 active:opacity-80'}"
             >
-                {#if loginState === "loading"}
+                {#if loginState === 'loading'}
                     <LoaderCircle size={16} class="animate-spin" />
-                    Signing in...
-                {:else if loginState === "success"}
+                    {needsSetup ? 'Creating account...' : 'Signing in...'}
+                {:else if loginState === 'success'}
                     <Check size={16} />
-                    Welcome back
-                {:else if loginState === "error"}
+                    {needsSetup ? 'Account created' : 'Welcome back'}
+                {:else if loginState === 'error'}
                     <X size={16} />
                     {errorMessage}
                 {:else}
-                    Sign in
+                    {buttonLabel}
                 {/if}
             </button>
         </form>
 
-        <div class="my-6 flex items-center gap-3">
-            <div class="h-px flex-1 bg-border"></div>
-            <span class="text-xs text-muted-foreground/50">or</span>
-            <div class="h-px flex-1 bg-border"></div>
-        </div>
+        {#if !needsSetup}
+            <div class="my-6 flex items-center gap-3">
+                <div class="h-px flex-1 bg-border"></div>
+                <span class="text-xs text-muted-foreground/50">or</span>
+                <div class="h-px flex-1 bg-border"></div>
+            </div>
 
-        <button
-            type="button"
-            disabled={isSubmitting}
-            onclick={handleCfxLogin}
-            class="flex h-10 w-full items-center justify-center gap-2.5 rounded-md bg-[#F40552] text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-            <Cfxre class="h-4 w-auto" />
-            Sign in with Cfx.re
-        </button>
+            <button
+                type="button"
+                disabled={isSubmitting}
+                onclick={handleCfxLogin}
+                class="flex h-10 w-full items-center justify-center gap-2.5 rounded-md bg-[#F40552] text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+                <Cfxre class="h-4 w-auto" />
+                Sign in with Cfx.re
+            </button>
+        {/if}
 
         <p class="mt-8 text-center text-xs text-muted-foreground/50">
             runfive &middot; open source &middot; done right
@@ -203,9 +227,23 @@
 
 <style>
     @keyframes shake {
-        0%, 100% { transform: translateX(0); }
-        10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
-        20%, 40%, 60%, 80% { transform: translateX(4px); }
+        0%,
+        100% {
+            transform: translateX(0);
+        }
+        10%,
+        30%,
+        50%,
+        70%,
+        90% {
+            transform: translateX(-4px);
+        }
+        20%,
+        40%,
+        60%,
+        80% {
+            transform: translateX(4px);
+        }
     }
 
     :global(.animate-shake) {

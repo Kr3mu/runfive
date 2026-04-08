@@ -1,10 +1,13 @@
 <script lang="ts">
-    import type { Snippet } from "svelte";
-    import Logo from "$lib/components/logo.svelte";
-    import Github from "$lib/components/icons/github.svelte";
-    import Discord from "$lib/components/icons/discord.svelte";
+    import type { Snippet } from 'svelte';
+    import { createQuery } from '@tanstack/svelte-query';
+    import { authQueryOptions } from '$lib/api/auth';
+    import Logo from '$lib/components/logo.svelte';
+    import Github from '$lib/components/icons/github.svelte';
+    import Discord from '$lib/components/icons/discord.svelte';
 
     interface Props {
+        /** Page content rendered by the router */
         children: Snippet;
     }
 
@@ -12,23 +15,49 @@
 
     let pathname = $state(window.location.pathname);
 
-    $effect(() => {
-        const update = () => (pathname = window.location.pathname);
-        window.addEventListener("popstate", update);
-        // MutationObserver to catch SPA navigations that don't fire popstate
+    $effect((): (() => void) => {
+        const update = (): void => {
+            pathname = window.location.pathname;
+        };
+        window.addEventListener('popstate', update);
         const observer = new MutationObserver(update);
-        observer.observe(document.querySelector("head title") ?? document.head, { childList: true, subtree: true, characterData: true });
-        return () => {
-            window.removeEventListener("popstate", update);
+        observer.observe(
+            document.querySelector('head title') ?? document.head,
+            { childList: true, subtree: true, characterData: true },
+        );
+        return (): void => {
+            window.removeEventListener('popstate', update);
             observer.disconnect();
         };
     });
 
-    const isDashboard = $derived(pathname.startsWith("/dashboard"));
+    const isDashboard = $derived(pathname.startsWith('/dashboard'));
+    const isLoginPage = $derived(pathname === '/' || pathname === '');
+
+    const authQuery = createQuery(() => authQueryOptions());
+
+    const isAuthenticated = $derived(authQuery.data !== undefined && authQuery.data !== null);
+    const isAuthLoading = $derived(authQuery.isLoading);
+
+    $effect((): void => {
+        if (isAuthLoading) return;
+        if (isDashboard && !isAuthenticated) {
+            window.location.href = '/';
+        }
+        if (isLoginPage && isAuthenticated) {
+            window.location.href = '/dashboard';
+        }
+    });
 </script>
 
-{#if isDashboard}
-    {@render children()}
+{#if isAuthLoading}
+    <div class="flex min-h-svh items-center justify-center bg-background">
+        <Logo class="w-24 animate-pulse opacity-50" />
+    </div>
+{:else if isDashboard}
+    {#if isAuthenticated}
+        {@render children()}
+    {/if}
 {:else}
     <div class="flex min-h-svh flex-col">
         <div class="flex flex-1 flex-col">
@@ -36,9 +65,13 @@
         </div>
 
         <footer class="px-6 py-6" style="view-transition-name: footer;">
-            <div class="mx-auto flex max-w-4xl flex-col items-center gap-4 md:flex-row md:justify-between">
+            <div
+                class="mx-auto flex max-w-4xl flex-col items-center gap-4 md:flex-row md:justify-between"
+            >
                 <a href="/" data-view-transition>
-                    <Logo class="w-16 opacity-30 transition-opacity hover:opacity-60" />
+                    <Logo
+                        class="w-16 opacity-30 transition-opacity hover:opacity-60"
+                    />
                 </a>
 
                 <div class="flex items-center gap-4">

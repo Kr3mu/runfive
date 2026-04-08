@@ -26,6 +26,21 @@
     import { dashboardState } from "$lib/dashboard-state.svelte";
     import { widgetRegistry } from "$lib/widget-registry";
     import { encodeLayout } from "$lib/layout-codec";
+    import { logout } from "$lib/api/auth";
+
+    let isLoggingOut = $state(false);
+
+    function handleLogout(): void {
+        if (isLoggingOut) return;
+        isLoggingOut = true;
+        logout()
+            .then((): void => {
+                window.location.href = "/";
+            })
+            .catch((): void => {
+                isLoggingOut = false;
+            });
+    }
 
     let shareState = $state<"idle" | "copied">("idle");
 
@@ -277,12 +292,14 @@
             {/if}
         </button>
         <button
-            class="flex w-full items-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive
+            onclick={handleLogout}
+            disabled={isLoggingOut}
+            class="flex w-full items-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50
                 {collapsed ? 'justify-center p-2' : 'gap-2.5 px-2.5 py-[7px]'}"
             title={collapsed ? "Sign out" : undefined}
         >
             <LogOut size={collapsed ? 17 : 15} strokeWidth={1.8} class="text-muted-foreground/60" />
-            {#if !collapsed}<span class="text-[12.5px]">Sign Out</span>{/if}
+            {#if !collapsed}<span class="text-[12.5px]">{isLoggingOut ? 'Signing out...' : 'Sign Out'}</span>{/if}
         </button>
 
         <!-- Mini footer links -->
