@@ -86,6 +86,15 @@ func (h *AuthHandler) Register(c fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(buildMeResponse(&user))
 }
 
+// TODO: Implement magic-link invite flow for creating subsequent user accounts.
+// Register (above) only bootstraps the first owner account — all other users
+// must be invited by an existing user. Flow: authenticated user POSTs an
+// email/identifier, backend generates a single-use signed token, emails a
+// link like /invite/accept?token=..., recipient opens it and sets a password
+// (and/or links cfx.re). Tokens should expire (~24h) and be stored hashed in
+// a new invites table. This is the missing signup path that pairs with
+// commit 59d3c2d (OAuth is login-only, never creates accounts).
+
 // Login authenticates a user with username and password.
 //
 // POST /v1/auth/login

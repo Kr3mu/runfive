@@ -19,6 +19,14 @@ import (
 // Each TOML defines a managed FiveM server instance (name, port, paths,
 // resource config, etc.). Needs a typed ServerConfig struct for the TOML
 // schema and a loader that returns []ServerConfig keyed by directory name.
+//
+// TODO: Add ArtifactsDir field for the shared cfx.re server-binary pool.
+// Artifacts (cfx binaries) are shared across all managed servers — one
+// download, many servers reference it via an `artifact_version` field in
+// their server.toml. Needs integration with Kr3mu's existing artifact
+// scraper: expose a management endpoint to list/download/select available
+// artifact versions. Note: resources (scripts) are per-server and live
+// inside each servers/<name>/ dir — artifacts are the only shared asset.
 type Config struct {
 	// HTTP listen port
 	Port string
