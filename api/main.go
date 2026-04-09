@@ -6,12 +6,15 @@ package main
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 
 	"github.com/Kr3mu/runfive/internal/api"
 	"github.com/Kr3mu/runfive/internal/auth"
 	"github.com/Kr3mu/runfive/internal/config"
+	"github.com/Kr3mu/runfive/internal/console"
 	"github.com/Kr3mu/runfive/internal/database"
+	"github.com/Kr3mu/runfive/internal/models"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -65,13 +68,33 @@ func main() {
 
 	cfx := auth.NewCfxAuth(cfg.BaseURL)
 
+	setupTokenStore := auth.NewSetupTokenStore()
+	var userCount int64
+	if err := db.Model(&models.User{}).Count(&userCount).Error; err != nil {
+		log.Fatalf("Failed to count users: %v", err)
+	}
+
+	var setupURL string
+	if userCount == 0 {
+		token, err := setupTokenStore.Generate()
+		if err != nil {
+			log.Fatalf("Failed to generate setup token: %v", err)
+		}
+		setupURL = fmt.Sprintf("%s/?setup=%s", cfg.BaseURL, token)
+	}
+
 	app := api.New(appConfig, api.AppDeps{
 		DB:  db,
 		SM:  sm,
 		Cfx: cfx,
 		FE:  fe,
+		ST:  setupTokenStore,
 	})
 
-	log.Printf("Serving backend on: %s", cfg.Port)
+	if setupURL != "" {
+		console.SetupBanner(setupURL)
+	} else {
+		log.Printf("Serving backend on: %s", cfg.Port)
+	}
 	log.Fatal(app.Listen(":"+cfg.Port, listenConfig))
 }

@@ -40,23 +40,34 @@ func contentType(path string) string {
 
 // Register mounts the SPA static file handler on the Fiber app.
 // Must be called after all API routes are registered.
-func Register(app *fiber.App) {
+//
+// When quiet is true all informational log output is suppressed so the
+// startup banner remains the only visible message during first-time
+// setup. Fatal configuration issues are still silenced since they would
+// simply cause the SPA to serve no assets — the API still comes up.
+func Register(app *fiber.App, quiet bool) {
 	sub, err := fs.Sub(distFS, "dist")
 	if err != nil {
-		log.Println("[spa] no web build found, skipping static file serving")
+		if !quiet {
+			log.Println("[spa] no web build found, skipping static file serving")
+		}
 		return
 	}
 
 	index, err := fs.ReadFile(sub, "index.html")
 	if err != nil {
-		log.Println("[spa] index.html not found in build, skipping static file serving")
+		if !quiet {
+			log.Println("[spa] index.html not found in build, skipping static file serving")
+		}
 		return
 	}
 
 	hash := sha256.Sum256(index)
 	indexETag := fmt.Sprintf(`"%x"`, hash[:8])
 
-	log.Println("[spa] serving web panel from embedded build")
+	if !quiet {
+		log.Println("[spa] serving web panel from embedded build")
+	}
 
 	app.Get("/*", func(c fiber.Ctx) error {
 		path := strings.TrimPrefix(c.Path(), "/")

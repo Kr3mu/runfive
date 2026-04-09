@@ -24,22 +24,36 @@ type AppDeps struct {
 	Cfx *auth.CfxAuth
 	// FE encrypts sensitive database fields.
 	FE *auth.FieldEncryptor
+	// ST holds the ephemeral setup token gating the initial /register call.
+	ST *auth.SetupTokenStore
 }
 
 // New creates the Fiber application with all middleware and routes.
+//
+// While an initial setup token is active the request logger middleware
+// is suppressed on a per-request basis so the setup banner stays the
+// only visible output in the terminal. Access logging resumes
+// automatically once the owner account is created and the store is
+// cleared — no restart required.
 func New(appConfig fiber.Config, deps AppDeps) *fiber.App {
 	app := fiber.New(appConfig)
 
-	app.Use(logger.New())
+	setupActive := deps.ST != nil && deps.ST.IsActive()
+
+	app.Use(logger.New(logger.Config{
+		Next: func(_ fiber.Ctx) bool {
+			return deps.ST != nil && deps.ST.IsActive()
+		},
+	}))
 	app.Use(helmet.New())
 
 	setupRoutes(app, deps)
-	spa.Register(app)
+	spa.Register(app, setupActive)
 
 	return app
 }
 
 func setupRoutes(app *fiber.App, deps AppDeps) {
 	v1Group := app.Group("/v1")
-	v1.RegisterRouter(v1Group, deps.DB, deps.SM, deps.Cfx, deps.FE)
+	v1.RegisterRouter(v1Group, deps.DB, deps.SM, deps.Cfx, deps.FE, deps.ST)
 }

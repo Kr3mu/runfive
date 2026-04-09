@@ -25,8 +25,8 @@ import (
 // TODO: Add TOML config reader that scans the servers/ directory structure
 // and parses each server.toml into a typed Go struct. Needs a file watcher
 // or reload endpoint to pick up config changes without restart.
-func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *auth.CfxAuth, fe *auth.FieldEncryptor) {
-	authHandler := NewAuthHandler(db, sm, cfx, fe)
+func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *auth.CfxAuth, fe *auth.FieldEncryptor, st *auth.SetupTokenStore) {
+	authHandler := NewAuthHandler(db, sm, cfx, fe, st)
 	authGroup := r.Group("/auth")
 
 	authGroup.Get("/setup-status", authHandler.SetupStatus)

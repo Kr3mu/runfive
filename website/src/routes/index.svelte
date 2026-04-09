@@ -22,32 +22,118 @@
     let logoRect = $state<{ top: number; left: number; width: number } | null>(null);
     let needsSetup = $state<boolean | null>(null);
 
+    /** Eight individual hex characters for the setup code boxes. */
+    let codeBoxes = $state<string[]>(['', '', '', '', '', '', '', '']);
+    /** References to the eight box inputs for focus management. */
+    const codeInputs: (HTMLInputElement | null)[] = $state([
+        null, null, null, null, null, null, null, null,
+    ]);
+
+    /** True when every box holds a hex character. */
+    const isCodeComplete = $derived(codeBoxes.every((c: string): boolean => c.length === 1));
+    /** Backend wire format: "xxxx-xxxx". */
+    const codeFormatted = $derived(
+        `${codeBoxes.slice(0, 4).join('')}-${codeBoxes.slice(4).join('')}`,
+    );
+
     const isSubmitting = $derived(
         loginState === 'loading' || loginState === 'success' || loginState === 'transition',
     );
 
     const buttonLabel = $derived(needsSetup ? 'Create Account' : 'Sign in');
+    const canSubmit = $derived(
+        needsSetup === false || (needsSetup === true && isCodeComplete),
+    );
 
     $effect((): void => {
         fetchSetupStatus()
             .then((status): void => {
                 needsSetup = status.needsSetup;
+                if (status.needsSetup) {
+                    const params: URLSearchParams = new URLSearchParams(window.location.search);
+                    const fromUrl: string | null = params.get('setup');
+                    if (fromUrl) {
+                        fillCodeFromString(fromUrl);
+                    }
+                }
             })
             .catch((): void => {
                 needsSetup = false;
             });
     });
 
+    /**
+     * Normalises a raw string to uppercase hex chars and writes up to 8 of
+     * them into the box state, leaving any leftover boxes blank. Accepts
+     * both upper- and lowercase input; the backend is case-insensitive.
+     */
+    function fillCodeFromString(raw: string): void {
+        const cleaned: string = raw.toUpperCase().replace(/[^0-9A-F]/g, '').slice(0, 8);
+        for (let i = 0; i < 8; i += 1) {
+            codeBoxes[i] = cleaned[i] ?? '';
+        }
+    }
+
+    /** Handle a single character typed into box `index`. */
+    function handleCodeInput(index: number, event: Event): void {
+        const target: HTMLInputElement = event.target as HTMLInputElement;
+        const cleaned: string = target.value.toUpperCase().replace(/[^0-9A-F]/g, '');
+        if (cleaned.length === 0) {
+            codeBoxes[index] = '';
+            target.value = '';
+            return;
+        }
+        const next: string = cleaned.slice(-1);
+        codeBoxes[index] = next;
+        target.value = next;
+        if (index < 7) {
+            codeInputs[index + 1]?.focus();
+            codeInputs[index + 1]?.select();
+        }
+    }
+
+    /** Handle navigation / deletion keys inside a code box. */
+    function handleCodeKeydown(index: number, event: KeyboardEvent): void {
+        if (event.key === 'Backspace' && codeBoxes[index] === '' && index > 0) {
+            event.preventDefault();
+            codeBoxes[index - 1] = '';
+            codeInputs[index - 1]?.focus();
+            return;
+        }
+        if (event.key === 'ArrowLeft' && index > 0) {
+            event.preventDefault();
+            codeInputs[index - 1]?.focus();
+            codeInputs[index - 1]?.select();
+            return;
+        }
+        if (event.key === 'ArrowRight' && index < 7) {
+            event.preventDefault();
+            codeInputs[index + 1]?.focus();
+            codeInputs[index + 1]?.select();
+        }
+    }
+
+    /** Distribute a pasted string across all boxes. */
+    function handleCodePaste(event: ClipboardEvent): void {
+        event.preventDefault();
+        const text: string = event.clipboardData?.getData('text') ?? '';
+        fillCodeFromString(text);
+        const firstEmpty: number = codeBoxes.findIndex((c: string): boolean => c === '');
+        const focusIdx: number = firstEmpty === -1 ? 7 : firstEmpty;
+        codeInputs[focusIdx]?.focus();
+    }
+
     function handleLogin(e: SubmitEvent): void {
         e.preventDefault();
         if (isSubmitting) return;
         if (needsSetup === null) return;
+        if (needsSetup && !isCodeComplete) return;
 
         loginState = 'loading';
         errorMessage = '';
 
         const action: Promise<unknown> = needsSetup
-            ? register(username, password)
+            ? register(username, password, codeFormatted)
             : login(username, password);
 
         action
@@ -131,6 +217,45 @@
         </div>
 
         <form onsubmit={handleLogin} class="flex flex-col gap-4">
+            {#if needsSetup}
+                <div class="flex flex-col gap-1.5">
+                    <label
+                        for="code-0"
+                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                    >
+                        Setup Code
+                    </label>
+                    <div class="flex items-center justify-between gap-1.5">
+                        {#each codeBoxes as _box, i (i)}
+                            <input
+                                id={`code-${i}`}
+                                bind:this={codeInputs[i]}
+                                type="text"
+                                inputmode="text"
+                                autocomplete="off"
+                                autocapitalize="off"
+                                spellcheck="false"
+                                maxlength="1"
+                                value={codeBoxes[i]}
+                                disabled={isSubmitting}
+                                oninput={(e: Event): void => handleCodeInput(i, e)}
+                                onkeydown={(e: KeyboardEvent): void => handleCodeKeydown(i, e)}
+                                onpaste={handleCodePaste}
+                                onfocus={(e: FocusEvent): void => {
+                                    (e.target as HTMLInputElement).select();
+                                }}
+                                class="h-11 w-full min-w-0 rounded-md border bg-background text-center font-mono text-base font-semibold text-foreground uppercase outline-none transition-all focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50 {loginState === 'error' ? 'border-destructive' : 'border-border'}"
+                            />
+                            {#if i === 3}
+                                <span class="select-none text-muted-foreground/60">&ndash;</span>
+                            {/if}
+                        {/each}
+                    </div>
+                    <p class="text-[11px] text-muted-foreground/60">
+                        Printed to the server console at first startup.
+                    </p>
+                </div>
+            {/if}
             <div class="flex flex-col gap-1.5">
                 <label
                     for="username"
@@ -183,7 +308,7 @@
 
             <button
                 type="submit"
-                disabled={isSubmitting || needsSetup === null}
+                disabled={isSubmitting || needsSetup === null || !canSubmit}
                 class="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-md font-heading text-sm font-semibold tracking-wide transition-all disabled:cursor-not-allowed {loginState === 'success' ? 'bg-emerald-500 text-white' : loginState === 'error' ? 'animate-shake bg-red-600 text-white' : 'bg-primary text-primary-foreground hover:opacity-90 active:opacity-80'}"
             >
                 {#if loginState === 'loading'}
