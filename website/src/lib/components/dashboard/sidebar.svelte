@@ -11,10 +11,7 @@
     import PanelLeftClose from "@lucide/svelte/icons/panel-left-close";
     import PanelLeftOpen from "@lucide/svelte/icons/panel-left-open";
     import LogOut from "@lucide/svelte/icons/log-out";
-    import Cpu from "@lucide/svelte/icons/cpu";
     import Activity from "@lucide/svelte/icons/activity";
-    import HardDrive from "@lucide/svelte/icons/hard-drive";
-    import Wifi from "@lucide/svelte/icons/wifi";
     import Github from "$lib/components/icons/github.svelte";
     import Discord from "$lib/components/icons/discord.svelte";
     import Info from "@lucide/svelte/icons/info";
@@ -23,6 +20,7 @@
     import Plus from "@lucide/svelte/icons/plus";
     import Share2 from "@lucide/svelte/icons/share-2";
     import ClipboardCheck from "@lucide/svelte/icons/clipboard-check";
+    import ServerSwitcher from "./server-switcher.svelte";
     import { dashboardState } from "$lib/dashboard-state.svelte";
     import { widgetRegistry } from "$lib/widget-registry";
     import { encodeLayout } from "$lib/layout-codec";
@@ -77,23 +75,12 @@
         "shield-ban": ShieldBan,
     };
 
-    const serverName = "RunFive Dev";
-    const playerCount = 42;
-    const maxPlayers = 64;
-    const playerPercent = Math.round((playerCount / maxPlayers) * 100);
-
     const navItems = [
         { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", active: true },
         { icon: Users, label: "Players", href: "/dashboard/players", active: false },
         { icon: Terminal, label: "Console", href: "/dashboard/console", active: false },
         { icon: ShieldBan, label: "Bans", href: "/dashboard/bans", active: false },
         { icon: Settings, label: "Settings", href: "/dashboard/settings", active: false },
-    ];
-
-    const stats = [
-        { icon: Cpu, label: "CPU", value: "23%", color: "text-emerald-400" },
-        { icon: HardDrive, label: "RAM", value: "4.2G", color: "text-blue-400" },
-        { icon: Activity, label: "Tick", value: "8.2ms", color: "text-primary" },
     ];
 </script>
 
@@ -120,50 +107,9 @@
         </button>
     </div>
 
-    <!-- Server Status Block -->
+    <!-- Server Switcher (active server preview + dropdown to change) -->
     <div class="shrink-0 {collapsed ? 'px-1.5 py-2' : 'px-3 pb-3'}">
-        {#if collapsed}
-            <div class="flex flex-col items-center gap-2">
-                <div class="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]"></div>
-                <span class="text-[9px] font-bold text-primary">{playerCount}</span>
-            </div>
-        {:else}
-            <div class="rounded-lg border border-border/50 bg-background/50 p-3">
-                <div class="mb-2 flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                        <div class="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]"></div>
-                        <span class="font-heading text-[11px] font-semibold text-foreground">{serverName}</span>
-                    </div>
-                    <Wifi size={12} class="text-emerald-500" />
-                </div>
-
-                <!-- Player bar -->
-                <div class="mb-2.5">
-                    <div class="mb-1 flex items-baseline justify-between">
-                        <span class="text-[10px] text-muted-foreground">Players</span>
-                        <span class="font-mono text-[10px] font-semibold text-foreground">
-                            <span class="text-primary">{playerCount}</span><span class="text-muted-foreground">/{maxPlayers}</span>
-                        </span>
-                    </div>
-                    <div class="h-1 overflow-hidden rounded-full bg-muted">
-                        <div
-                            class="h-full rounded-full bg-primary transition-all duration-500"
-                            style="width: {playerPercent}%"
-                        ></div>
-                    </div>
-                </div>
-
-                <!-- Quick Stats -->
-                <div class="flex justify-between">
-                    {#each stats as stat}
-                        <div class="flex items-center gap-1">
-                            <stat.icon size={10} class="text-muted-foreground/50" />
-                            <span class="font-mono text-[9px] font-medium {stat.color}">{stat.value}</span>
-                        </div>
-                    {/each}
-                </div>
-            </div>
-        {/if}
+        <ServerSwitcher {collapsed} />
     </div>
 
     <!-- Divider -->
