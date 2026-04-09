@@ -19,6 +19,7 @@ import (
 //   - GET    /v1/servers/:id          (requires server view permission)
 //   - PUT    /v1/servers/:id/roles    (owner only: assign user roles per server)
 //   - DELETE /v1/servers/:id          (owner only: remove server dir)
+//
 // Each server endpoint should use RequirePermission middleware to check
 // the user's role on that specific server.
 //
@@ -42,4 +43,9 @@ func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *a
 	protected.Get("/me", authHandler.Me)
 	protected.Get("/sessions", authHandler.Sessions)
 	protected.Delete("/sessions/:id", authHandler.RevokeSession)
+
+	master := protected.Group("/master", auth.RequireMaster)
+
+	master.Post("/savediscord", authHandler.SaveDiscordAuthentication)
+	master.Get("/getdiscord", authHandler.GetDiscordAuthentication)
 }

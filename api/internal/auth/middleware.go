@@ -63,6 +63,20 @@ func RequireAuth(sm *SessionManager, db *gorm.DB) fiber.Handler {
 	}
 }
 
+func RequireMaster(c fiber.Ctx) error {
+	user, ok := c.Locals(localsUserKey).(*models.User)
+
+	if !ok {
+		return nil
+	}
+
+	if user.IsOwner {
+		return c.Next()
+	}
+
+	return nil
+}
+
 // OptionalAuth returns Fiber middleware that loads the session if present
 // but does not require it. Downstream handlers can check GetUser(c).
 func OptionalAuth(sm *SessionManager, db *gorm.DB) fiber.Handler {

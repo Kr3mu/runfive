@@ -145,6 +145,18 @@ export async function login(username: string, password: string): Promise<AuthUse
   return (await res.json()) as AuthUser;
 }
 
+export async function SaveDiscordAuthentication(clientId: string, clientSecret: string) {
+  const res: Response = await fetch('/v1/auth/master/savediscord', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientid: clientId, clientsecret: clientSecret}),
+  });
+  if (!res.ok) {
+    const body: { error: string } = (await res.json()) as { error: string };
+    throw new Error(body.error ?? `Saving Failed: ${res.status}`);
+  }
+}
+
 /**
  * Logs out the current session.
  *

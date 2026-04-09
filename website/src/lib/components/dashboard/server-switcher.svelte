@@ -115,7 +115,7 @@
                             <span class="text-primary">{selected.playerCount}</span><span class="text-muted-foreground">/{selected.maxPlayers}</span>
                         </span>
                     </div>
-                    <div class="h-[5px] overflow-hidden rounded-full bg-muted">
+                    <div class="h-1.25 overflow-hidden rounded-full bg-muted">
                         <div
                             class="h-full rounded-full bg-primary transition-all duration-500"
                             style="width: {playerPercent(selected)}%"
@@ -146,7 +146,7 @@
         side="right"
         align="start"
         sideOffset={8}
-        class="z-50 w-[296px] rounded-xl border border-border/60 bg-popover/95 p-1.5 shadow-2xl shadow-black/30 ring-1 ring-foreground/5 outline-none backdrop-blur-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-[side=right]:slide-in-from-left-1"
+        class="z-50 w-74rounded-xl border border-border/60 bg-popover/95 p-1.5 shadow-2xl shadow-black/30 ring-1 ring-foreground/5 outline-none backdrop-blur-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-[side=right]:slide-in-from-left-1"
     >
         <!-- Header -->
         <div class="flex items-center justify-between px-2 pt-1.5 pb-2">
@@ -161,7 +161,7 @@
         <div class="mx-1 mb-1 h-px bg-border/40"></div>
 
         <!-- Server list -->
-        <div class="flex max-h-[320px] flex-col gap-0.5 overflow-y-auto px-1">
+        <div class="flex max-h-80 flex-col gap-0.5 overflow-y-auto px-1">
             {#each list as server (server.id)}
                 {@const isActive = selected?.id === server.id}
                 <button
@@ -170,7 +170,7 @@
                         {isActive ? 'bg-primary/8' : 'hover:bg-muted/40'}"
                 >
                     {#if isActive}
-                        <span class="absolute top-1/2 left-0 h-5 w-[2px] -translate-y-1/2 rounded-r-full bg-primary"></span>
+                        <span class="absolute top-1/2 left-0 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-primary"></span>
                     {/if}
 
                     <!-- Row 1: at-a-glance -->
@@ -198,7 +198,7 @@
                     </div>
 
                     <!-- Row 2: sub-line status + address, aligned under name -->
-                    <div class="mt-1 flex items-center gap-1.5 pl-[18px]">
+                    <div class="mt-1 flex items-center gap-1.5 pl-4.5">
                         <span class="text-[9.5px] font-medium {statusText[server.status]}">
                             {statusLabel[server.status]}
                         </span>
