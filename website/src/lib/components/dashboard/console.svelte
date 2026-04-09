@@ -187,7 +187,7 @@
         class="console-scroll flex-1 overflow-y-auto overflow-x-hidden font-mono text-xs leading-[1.7]"
     >
         {#each filteredLogs as entry, i (entry.id)}
-            <div class="flex items-baseline border-b border-border/10 px-3 py-[3px] transition-colors hover:bg-muted/20">
+            <div class="flex items-baseline border-b border-border/10 px-3 py-0.75 transition-colors hover:bg-muted/20">
                 <span class="w-6 shrink-0 select-none text-right text-[11px] text-muted-foreground/25">{i + 1}</span>
                 <span class="mx-2 shrink-0 select-none text-[11px] text-muted-foreground/35">{entry.timestamp}</span>
                 <span class="mr-2 w-7 shrink-0 select-none text-right text-[11px] font-semibold {levelTag[entry.level].class}">{levelTag[entry.level].text}</span>
