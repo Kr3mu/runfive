@@ -28,15 +28,17 @@
         SaveDiscordAuthentication(discordClient, discordSecret)
             .then((): void => {
                 discordState = "success";
+                isSubmitting = false;
             })
             .catch((err: unknown): void => {
                 discordState = "error";
                 errorMessage =
                     err instanceof Error ? err.message : "Saving failed";
-                setTimeout((): void => {
-                    discordState = "idle";
-                }, 2000);
             });
+
+        setTimeout((): void => {
+            discordState = "idle";
+        }, 4000);
     }
 </script>
 
@@ -128,7 +130,7 @@
                 Successfully saved configuration
             {:else if discordState === "error"}
                 <X size={16} />
-                <!-- {errorMessage} -->
+                {errorMessage}
             {:else}
                 Save configuration
             {/if}
