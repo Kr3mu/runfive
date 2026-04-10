@@ -71,6 +71,11 @@ interface SetupStatus {
   needsSetup: boolean;
 }
 
+export interface DiscordAuthentication {
+  clientId: string;
+  clientSecret: string;
+}
+
 /**
  * Fetches the current authenticated user or returns null if not logged in.
  *
@@ -155,6 +160,13 @@ export async function SaveDiscordAuthentication(clientId: string, clientSecret: 
     const body: { error: string } = (await res.json()) as { error: string };
     throw new Error(body.error ?? `Saving Failed: ${res.status}`);
   }
+}
+
+export async function GetDiscordAuthentication(): Promise<{clientId: string, clientSecret: string} | null> {
+  const res: Response = await fetch('/v1/auth/master/getdiscord');
+  if (res.status === 401) return null;
+  if (!res.ok) throw new Error(`GET /v1/auth/master/getdiscord failed: ${res.status}`);
+  return (await res.json()) as DiscordAuthentication;
 }
 
 /**

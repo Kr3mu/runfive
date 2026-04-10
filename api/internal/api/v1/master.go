@@ -79,7 +79,7 @@ func (h *AuthHandler) GetDiscordAuthentication(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"clientid":     envMap["DISCORD_CLIENT_ID"],
-		"clientsecret": envMap["DISCORD_CLIENT_SECRET"],
+		"clientId":     envMap["DISCORD_CLIENT_ID"],
+		"clientSecret": envMap["DISCORD_CLIENT_SECRET"],
 	})
 }

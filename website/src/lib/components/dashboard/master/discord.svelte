@@ -6,7 +6,13 @@
     import LoaderCircle from "@lucide/svelte/icons/loader-circle";
     import X from "@lucide/svelte/icons/x";
     import SquareArrowOutUpRight from "@lucide/svelte/icons/square-arrow-out-up-right";
-    import { SaveDiscordAuthentication } from "$lib/api/auth";
+    import {
+        SaveDiscordAuthentication,
+        GetDiscordAuthentication,
+        type DiscordAuthentication,
+    } from "$lib/api/auth";
+    import { onMount } from "svelte";
+    import { toast } from "svelte-sonner";
 
     type DiscordState = "idle" | "loading" | "success" | "transition" | "error";
 
@@ -26,11 +32,11 @@
         errorMessage = "";
 
         SaveDiscordAuthentication(discordClient, discordSecret)
-            .then((): void => {
+            .then(() => {
                 discordState = "success";
                 isSubmitting = false;
             })
-            .catch((err: unknown): void => {
+            .catch((err: unknown) => {
                 discordState = "error";
                 errorMessage =
                     err instanceof Error ? err.message : "Saving failed";
@@ -40,6 +46,28 @@
             discordState = "idle";
         }, 4000);
     }
+
+    onMount(() => {
+        GetDiscordAuthentication()
+            .then((data) => {
+                console.log(data);
+                if (!data) {
+                    return toast.error(
+                        "Failed to fetch discord authentication",
+                    );
+                }
+
+                discordSecret = data.clientSecret;
+                discordClient = data.clientId;
+            })
+            .catch((err: unknown) => {
+                toast.error(
+                    err instanceof Error
+                        ? err.message
+                        : "Failed to fetch discord authentication",
+                );
+            });
+    });
 </script>
 
 <section class="mb-8">
