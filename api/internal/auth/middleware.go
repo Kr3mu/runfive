@@ -70,14 +70,14 @@ func RequireMaster(c fiber.Ctx) error {
 	user, ok := c.Locals(localsUserKey).(*models.User)
 
 	if !ok {
-		return nil
+		return fiber.NewError(fiber.StatusForbidden, "Not a master")
 	}
 
 	if user.IsOwner {
 		return c.Next()
 	}
 
-	return nil
+	return fiber.NewError(fiber.StatusForbidden, "Not a master")
 }
 
 // OptionalAuth returns Fiber middleware that loads the session if present
