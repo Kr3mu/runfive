@@ -84,11 +84,12 @@ func main() {
 	}
 
 	app := api.New(appConfig, api.AppDeps{
-		DB:  db,
-		SM:  sm,
-		Cfx: cfx,
-		FE:  fe,
-		ST:  setupTokenStore,
+		DB:      db,
+		SM:      sm,
+		Cfx:     cfx,
+		FE:      fe,
+		ST:      setupTokenStore,
+		BaseURL: cfg.BaseURL,
 	})
 
 	if setupURL != "" {

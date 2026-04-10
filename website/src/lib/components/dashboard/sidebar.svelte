@@ -24,9 +24,23 @@
     import { dashboardState } from "$lib/dashboard-state.svelte";
     import { widgetRegistry } from "$lib/widget-registry";
     import { encodeLayout } from "$lib/layout-codec";
-    import { logout } from "$lib/api/auth";
+    import { logout, authQueryOptions } from "$lib/api/auth";
+    import { createQuery } from "@tanstack/svelte-query";
+
+    const authQuery = createQuery(() => authQueryOptions());
+    const isOwner = $derived(authQuery.data?.isOwner ?? false);
 
     let isLoggingOut = $state(false);
+
+    let pathname = $state(window.location.pathname);
+    $effect((): (() => void) => {
+        const update = (): void => { pathname = window.location.pathname; };
+        window.addEventListener("popstate", update);
+        const observer = new MutationObserver(update);
+        observer.observe(document.querySelector("head title") ?? document.head, { childList: true, subtree: true, characterData: true });
+        return (): void => { window.removeEventListener("popstate", update); observer.disconnect(); };
+    });
+    const isUsersPage = $derived(pathname.startsWith("/dashboard/users"));
 
     function handleLogout(): void {
         if (isLoggingOut) return;
@@ -179,6 +193,40 @@
                     <Plus size={17} strokeWidth={1.8} />
                 </button>
             {/each}
+        </div>
+    {/if}
+
+    <!-- Panel section (owner only) -->
+    {#if isOwner}
+        <div class="shrink-0 {collapsed ? 'px-1.5' : 'px-2'} pb-1">
+            <div class="{collapsed ? '' : 'mx-0.5'} mb-2 h-px bg-border/50"></div>
+            {#if !collapsed}
+                <p class="mb-1.5 px-2.5 text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase">
+                    Panel
+                </p>
+            {/if}
+            <a
+                href="/dashboard/users"
+                data-view-transition
+                class="group flex items-center rounded-md transition-all duration-150
+                    {collapsed ? 'mb-1 justify-center p-2' : 'mb-0.5 gap-2.5 px-2.5 py-[7px]'}
+                    {isUsersPage
+                        ? 'bg-primary/12 text-primary'
+                        : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'}"
+                title={collapsed ? "Users" : undefined}
+            >
+                <Users
+                    size={collapsed ? 17 : 15}
+                    strokeWidth={isUsersPage ? 2.2 : 1.8}
+                    class="shrink-0 {isUsersPage ? 'text-primary' : 'text-muted-foreground/60 group-hover:text-foreground/70'}"
+                />
+                {#if !collapsed}
+                    <span class="text-[12.5px] font-medium {isUsersPage ? 'font-semibold' : ''}">Users</span>
+                    {#if isUsersPage}
+                        <div class="ml-auto h-1 w-1 rounded-full bg-primary"></div>
+                    {/if}
+                {/if}
+            </a>
         </div>
     {/if}
 

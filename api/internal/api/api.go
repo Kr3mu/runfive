@@ -26,6 +26,8 @@ type AppDeps struct {
 	FE *auth.FieldEncryptor
 	// ST holds the ephemeral setup token gating the initial /register call.
 	ST *auth.SetupTokenStore
+	// BaseURL is the public base URL for constructing invite links.
+	BaseURL string
 }
 
 // New creates the Fiber application with all middleware and routes.
@@ -55,5 +57,5 @@ func New(appConfig fiber.Config, deps AppDeps) *fiber.App {
 
 func setupRoutes(app *fiber.App, deps AppDeps) {
 	v1Group := app.Group("/v1")
-	v1.RegisterRouter(v1Group, deps.DB, deps.SM, deps.Cfx, deps.FE, deps.ST)
+	v1.RegisterRouter(v1Group, deps.DB, deps.SM, deps.Cfx, deps.FE, deps.ST, deps.BaseURL)
 }

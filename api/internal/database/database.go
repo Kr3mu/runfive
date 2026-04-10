@@ -19,9 +19,16 @@ func Connect() (*gorm.DB, error) {
 		return nil, err
 	}
 
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, err
+	}
+	sqlDB.SetMaxOpenConns(1)
+
 	err = db.AutoMigrate(
 		&models.User{},
 		&models.UserSession{},
+		&models.Invite{},
 	)
 	if err != nil {
 		return nil, err

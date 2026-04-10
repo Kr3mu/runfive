@@ -4,6 +4,8 @@ package v1
 
 import (
 	"errors"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/Kr3mu/runfive/internal/auth"
@@ -54,6 +56,7 @@ func (h *AuthHandler) Register(c fiber.Ctx) error {
 	if err := c.Bind().Body(&req); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
 	}
+	req.Username = strings.TrimSpace(req.Username)
 	if len(req.Username) < 3 || len(req.Username) > 32 {
 		return fiber.NewError(fiber.StatusBadRequest, "username must be 3-32 characters")
 	}
@@ -92,21 +95,14 @@ func (h *AuthHandler) Register(c fiber.Ctx) error {
 
 	h.setupToken.Clear()
 
-	if err := h.createSessionForUser(c, &user); err != nil {
+	if err := createSessionForUser(h.db, h.sm, c, &user); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to create session")
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(buildMeResponse(&user))
 }
 
-// TODO: Implement magic-link invite flow for creating subsequent user accounts.
-// Register (above) only bootstraps the first owner account — all other users
-// must be invited by an existing user. Flow: authenticated user POSTs an
-// email/identifier, backend generates a single-use signed token, emails a
-// link like /invite/accept?token=..., recipient opens it and sets a password
-// (and/or links cfx.re). Tokens should expire (~24h) and be stored hashed in
-// a new invites table. This is the missing signup path that pairs with
-// commit 59d3c2d (OAuth is login-only, never creates accounts).
+// Additional user accounts are created via the invite system (see invites.go).
 
 // Login authenticates a user with username and password.
 //
@@ -116,6 +112,7 @@ func (h *AuthHandler) Login(c fiber.Ctx) error {
 	if err := c.Bind().Body(&req); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
 	}
+	req.Username = strings.TrimSpace(req.Username)
 	if len(req.Username) < 3 || len(req.Username) > 32 {
 		return fiber.NewError(fiber.StatusBadRequest, "username must be 3-32 characters")
 	}
@@ -139,7 +136,11 @@ func (h *AuthHandler) Login(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusUnauthorized, "invalid credentials")
 	}
 
-	if err := h.createSessionForUser(c, &user); err != nil {
+	if user.SuspendedAt != nil {
+		return fiber.NewError(fiber.StatusForbidden, "account suspended")
+	}
+
+	if err := createSessionForUser(h.db, h.sm, c, &user); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to create session")
 	}
 
@@ -245,9 +246,9 @@ func (h *AuthHandler) RevokeSession(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// createSessionForUser creates an SCS session and tracks it in user_sessions.
-func (h *AuthHandler) createSessionForUser(c fiber.Ctx, user *models.User) error {
-	token, err := h.sm.CreateSession(c, user.ID)
+// createSessionForUser creates a session and tracks it in user_sessions.
+func createSessionForUser(db *gorm.DB, sm *auth.SessionManager, c fiber.Ctx, user *models.User) error {
+	token, err := sm.CreateSession(c, user.ID)
 	if err != nil {
 		return err
 	}
@@ -259,11 +260,12 @@ func (h *AuthHandler) createSessionForUser(c fiber.Ctx, user *models.User) error
 		CreatedAt:  time.Now(),
 		LastSeenAt: time.Now(),
 	}
-	return h.db.Create(&userSession).Error
+	return db.Create(&userSession).Error
 }
 
 // CfxRedirect initiates the Cfx.re authentication flow.
 // If the user is already authenticated, this becomes an account-linking flow.
+// If ?invite=<token> is present, the callback will create a new account via invite.
 //
 // GET /v1/auth/cfx
 func (h *AuthHandler) CfxRedirect(c fiber.Ctx) error {
@@ -273,7 +275,18 @@ func (h *AuthHandler) CfxRedirect(c fiber.Ctx) error {
 		linkUserID = &user.ID
 	}
 
-	redirectURL, err := h.cfx.StartAuth(linkUserID)
+	inviteToken := c.Query("invite")
+	if inviteToken != "" {
+		// Validate the invite token before starting the OAuth flow
+		tokenHash := hashInviteToken(inviteToken)
+		var invite models.Invite
+		err := h.db.Where("token_hash = ? AND used_at IS NULL AND expires_at > ?", tokenHash, time.Now()).First(&invite).Error
+		if err != nil {
+			return c.Redirect().To("/invite/accept?token=" + url.QueryEscape(inviteToken) + "&error=invalid_invite")
+		}
+	}
+
+	redirectURL, err := h.cfx.StartAuth(linkUserID, inviteToken)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to start cfx auth")
 	}
@@ -292,7 +305,7 @@ func (h *AuthHandler) CfxCallback(c fiber.Ctx) error {
 		return c.Redirect().To("/?error=invalid_callback")
 	}
 
-	userData, apiKey, linkUserID, err := h.cfx.HandleCallback(state, payload)
+	userData, apiKey, linkUserID, inviteToken, err := h.cfx.HandleCallback(state, payload)
 	if err != nil {
 		return c.Redirect().To("/?error=auth_failed")
 	}
@@ -304,6 +317,7 @@ func (h *AuthHandler) CfxCallback(c fiber.Ctx) error {
 
 	avatarURL := auth.CfxForumURL + userData.AvatarTemplate
 
+	// Branch 1: account linking (authenticated user adds cfx.re)
 	if linkUserID != nil {
 		result := h.db.Model(&models.User{}).Where("id = ?", *linkUserID).Updates(map[string]interface{}{
 			"cfx_id":         userData.ID,
@@ -317,6 +331,43 @@ func (h *AuthHandler) CfxCallback(c fiber.Ctx) error {
 		return c.Redirect().To("/dashboard")
 	}
 
+	// Branch 2: invite registration (create new account via cfx.re)
+	if inviteToken != "" {
+		tokenHash := hashInviteToken(inviteToken)
+		var invite models.Invite
+		if err := h.db.Where("token_hash = ? AND used_at IS NULL AND expires_at > ?", tokenHash, time.Now()).First(&invite).Error; err != nil {
+			return c.Redirect().To("/invite/accept?token=" + url.QueryEscape(inviteToken) + "&error=invalid_invite")
+		}
+
+		now := time.Now()
+		user := models.User{
+			Username:     userData.Username,
+			CfxID:        &userData.ID,
+			CfxUsername:   &userData.Username,
+			CfxAvatarURL: &avatarURL,
+			CfxAPIKey:    encryptedKey,
+		}
+
+		err = h.db.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Create(&user).Error; err != nil {
+				return err
+			}
+			return tx.Model(&invite).Updates(map[string]interface{}{
+				"used_at": now,
+				"used_by": user.ID,
+			}).Error
+		})
+		if err != nil {
+			return c.Redirect().To("/invite/accept?token=" + url.QueryEscape(inviteToken) + "&error=registration_failed")
+		}
+
+		if err := createSessionForUser(h.db, h.sm, c, &user); err != nil {
+			return c.Redirect().To("/?error=session_failed")
+		}
+		return c.Redirect().To("/dashboard")
+	}
+
+	// Branch 3: regular login (find existing account by cfx_id)
 	var user models.User
 	result := h.db.Where("cfx_id = ?", userData.ID).First(&user)
 	if result.Error != nil && !errors.Is(result.Error, gorm.ErrRecordNotFound) {
@@ -327,15 +378,17 @@ func (h *AuthHandler) CfxCallback(c fiber.Ctx) error {
 		return c.Redirect().To("/?error=account_not_found")
 	}
 
-	{
-		h.db.Model(&user).Updates(map[string]interface{}{
-			"cfx_username":   userData.Username,
-			"cfx_avatar_url": avatarURL,
-			"cfx_api_key":    encryptedKey,
-		})
+	if user.SuspendedAt != nil {
+		return c.Redirect().To("/?error=account_suspended")
 	}
 
-	if err := h.createSessionForUser(c, &user); err != nil {
+	h.db.Model(&user).Updates(map[string]interface{}{
+		"cfx_username":   userData.Username,
+		"cfx_avatar_url": avatarURL,
+		"cfx_api_key":    encryptedKey,
+	})
+
+	if err := createSessionForUser(h.db, h.sm, c, &user); err != nil {
 		return c.Redirect().To("/?error=session_failed")
 	}
 
