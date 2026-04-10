@@ -1,3 +1,10 @@
+<!--
+    Discord OAuth configuration form.
+
+    Lets the owner enter their Discord application's client ID and secret.
+    On save, credentials are validated against the Discord API before persisting.
+    On mount, fetches any existing credentials to pre-fill the form.
+-->
 <script lang="ts">
     import Discord from "$lib/components/icons/discord.svelte";
     import Check from "@lucide/svelte/icons/check";
@@ -24,6 +31,7 @@
 
     let isSubmitting = $state(false);
 
+    /** Validates and saves the Discord credentials via the backend. */
     function handleSave(e: SubmitEvent): void {
         e.preventDefault();
         if (isSubmitting) return;
@@ -42,15 +50,16 @@
                     err instanceof Error ? err.message : "Saving failed";
             });
 
+        // Reset button state after feedback period.
         setTimeout((): void => {
             discordState = "idle";
         }, 4000);
     }
 
+    /** Load existing Discord credentials on mount to pre-fill the form. */
     onMount(() => {
         GetDiscordAuthentication()
             .then((data) => {
-                console.log(data);
                 if (!data) {
                     return toast.error(
                         "Failed to fetch discord authentication",

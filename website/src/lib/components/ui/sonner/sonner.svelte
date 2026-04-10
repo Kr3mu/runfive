@@ -1,3 +1,8 @@
+<!--
+    Sonner toast wrapper — themed to match the panel's design tokens.
+    Provides custom icons for each toast type (loading, success, error, info, warning).
+    Automatically follows the current color mode via mode-watcher.
+-->
 <script lang="ts">
 	import { Toaster as Sonner, type ToasterProps as SonnerProps } from "svelte-sonner";
 	import { mode } from "mode-watcher";

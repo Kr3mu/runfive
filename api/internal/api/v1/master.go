@@ -1,3 +1,7 @@
+// master.go provides owner-only ("master") admin endpoints for configuring
+// external service integrations like Discord OAuth. These endpoints are
+// protected by the RequireMaster middleware which enforces IsOwner.
+
 package v1
 
 import (
@@ -10,9 +14,16 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// envPath is the file where Discord credentials are persisted.
+const envPath = ".env"
+
+// verifyDiscordCredentials tests the given client ID and secret against
+// the Discord API using a client_credentials grant. Returns nil if the
+// credentials are valid, or a descriptive error if Discord rejects them.
 func verifyDiscordCredentials(clientId, clientSecret string) error {
 	cc := client.New()
 
+	// Use Basic auth (base64 of client_id:client_secret) per Discord docs.
 	resp, err := cc.Post("https://discord.com/api/oauth2/token", client.Config{
 		Header: map[string]string{
 			"Content-Type":  "application/x-www-form-urlencoded",
@@ -38,6 +49,10 @@ func verifyDiscordCredentials(clientId, clientSecret string) error {
 	return nil
 }
 
+// SaveDiscordAuthentication validates and persists Discord OAuth credentials.
+// The credentials are verified against the Discord API before being written
+// to the .env file so the owner gets immediate feedback on typos.
+//
 // POST /v1/auth/master/savediscord
 func (h *AuthHandler) SaveDiscordAuthentication(c fiber.Ctx) error {
 	var req models.DiscordAuthentication
@@ -46,14 +61,13 @@ func (h *AuthHandler) SaveDiscordAuthentication(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
 	}
 
+	// Validate against Discord before persisting — catches wrong credentials early.
 	if err := verifyDiscordCredentials(req.ClientId, req.ClientSecret); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
 
-	envPath := ".env"
-
+	// Read existing .env to preserve other keys, then merge Discord credentials.
 	envMap, _ := godotenv.Read(envPath)
-
 	if envMap == nil {
 		envMap = make(map[string]string)
 	}
@@ -61,18 +75,19 @@ func (h *AuthHandler) SaveDiscordAuthentication(c fiber.Ctx) error {
 	envMap["DISCORD_CLIENT_ID"] = req.ClientId
 	envMap["DISCORD_CLIENT_SECRET"] = req.ClientSecret
 
-	err := godotenv.Write(envMap, envPath)
-	if err != nil {
+	if err := godotenv.Write(envMap, envPath); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to write .env")
 	}
 
 	return c.SendStatus(fiber.StatusOK)
 }
 
-// POST /v1/auth/master/getdiscord
+// GetDiscordAuthentication returns the currently configured Discord OAuth
+// credentials so the frontend can pre-fill the form. Called on page load
+// of the Master Actions panel.
+//
+// GET /v1/auth/master/getdiscord
 func (h *AuthHandler) GetDiscordAuthentication(c fiber.Ctx) error {
-	envPath := ".env"
-
 	envMap, err := godotenv.Read(envPath)
 	if err != nil {
 		envMap = make(map[string]string)
