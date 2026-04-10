@@ -1,3 +1,10 @@
+<!--
+    Master Actions page — owner-only panel configuration.
+
+    Houses settings that affect the entire panel (not per-server),
+    such as configuring OAuth providers (Discord, etc.).
+    Only accessible to the owner/master account.
+-->
 <script>
     import Discord from "$lib/components/dashboard/master/discord.svelte";
 </script>
@@ -11,6 +18,7 @@
             Manage all settings regarded to panel
         </p>
 
+        <!-- Discord OAuth credential configuration -->
         <Discord />
     </div>
 </div>
