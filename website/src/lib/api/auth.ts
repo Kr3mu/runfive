@@ -7,7 +7,10 @@
  * @see MeResponse for the authenticated user shape
  */
 
-import { queryOptions } from '@tanstack/svelte-query';
+import {
+  queryOptions,
+  type UndefinedInitialDataOptions,
+} from '@tanstack/svelte-query';
 
 /** Linked Cfx.re account information. */
 interface CfxInfo {
@@ -84,7 +87,12 @@ async function fetchMe(): Promise<AuthUser | null> {
 }
 
 /** TanStack Query options for the authenticated user. */
-export const authQueryOptions = () =>
+export const authQueryOptions = (): UndefinedInitialDataOptions<
+  AuthUser | null,
+  Error,
+  AuthUser | null,
+  string[]
+> =>
   queryOptions({
     queryKey: ['auth', 'me'],
     queryFn: fetchMe,
