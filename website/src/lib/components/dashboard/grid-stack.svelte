@@ -12,7 +12,7 @@
     interface Props {
         items: GridLayoutItem[];
         columns?: number;
-        rows?: number;
+        cellHeight?: number;
         margin?: number;
         children: Snippet;
         onchange?: (items: GridLayoutItem[]) => void;
@@ -21,7 +21,7 @@
     let {
         items = $bindable(),
         columns = 12,
-        rows = 6,
+        cellHeight = 80,
         margin = 4,
         children,
         onchange,
@@ -47,17 +47,9 @@
         }));
     }
 
-    function computeCellHeight(): number {
-        if (!containerEl) return 80;
-        const available = containerEl.clientHeight;
-        const totalMargin = rows * margin * 2;
-        return Math.floor((available - totalMargin) / rows);
-    }
-
     function initGrid(): void {
         if (!GridStackClass || !containerEl) return;
 
-        // Destroy previous instance if any
         if (grid) {
             grid.offAll();
             grid.destroy(false);
@@ -67,13 +59,13 @@
         grid = GridStackClass.init(
             {
                 column: columns,
-                cellHeight: computeCellHeight(),
+                cellHeight,
                 margin,
-                maxRow: rows,
                 animate: true,
-                float: false,
+                float: true,
                 disableDrag: false,
                 disableResize: false,
+                alwaysShowResizeHandle: true,
                 draggable: {
                     handle: ".gs-drag-handle",
                 },
@@ -83,9 +75,6 @@
             },
             containerEl,
         );
-
-        // Apply static mode after init so handles are created first
-        grid.setStatic(!dashboardState.editing);
 
         grid.on("change", () => {
             items = serializeLayout();
@@ -101,7 +90,7 @@
         initGrid();
 
         const onResize = () => {
-            grid?.cellHeight(computeCellHeight());
+            grid?.cellHeight(cellHeight);
         };
         window.addEventListener("resize", onResize);
 
@@ -115,9 +104,6 @@
         };
     });
 
-    $effect(() => {
-        grid?.setStatic(!dashboardState.editing);
-    });
 </script>
 
 <div bind:this={containerEl} class="grid-stack h-full" class:gs-editing={dashboardState.editing}>
@@ -199,7 +185,12 @@
         border-width: 1px;
     }
 
+    :global(.grid-stack .gs-drag-handle) {
+        pointer-events: none;
+    }
+
     :global(.gs-editing .gs-drag-handle) {
+        pointer-events: auto;
         cursor: grab;
     }
 
