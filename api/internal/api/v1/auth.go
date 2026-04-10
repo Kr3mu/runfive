@@ -116,6 +116,12 @@ func (h *AuthHandler) Login(c fiber.Ctx) error {
 	if err := c.Bind().Body(&req); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
 	}
+	if len(req.Username) < 3 || len(req.Username) > 32 {
+		return fiber.NewError(fiber.StatusBadRequest, "username must be 3-32 characters")
+	}
+	if len(req.Password) < 8 {
+		return fiber.NewError(fiber.StatusBadRequest, "password must be at least 8 characters")
+	}
 
 	var user models.User
 	if err := h.db.Where("username = ?", req.Username).First(&user).Error; err != nil {
