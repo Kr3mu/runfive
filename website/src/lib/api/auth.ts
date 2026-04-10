@@ -154,7 +154,7 @@ export async function SaveDiscordAuthentication(clientId: string, clientSecret: 
   const res: Response = await fetch('/v1/auth/master/savediscord', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ clientid: clientId, clientsecret: clientSecret}),
+    body: JSON.stringify({ clientId, clientSecret}),
   });
   if (!res.ok) {
     const body: { error: string } = (await res.json()) as { error: string };
