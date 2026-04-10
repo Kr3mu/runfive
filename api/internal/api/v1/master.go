@@ -1,30 +1,24 @@
-// master.go provides owner-only ("master") admin endpoints for configuring
-// external service integrations like Discord OAuth. These endpoints are
-// protected by the RequireMaster middleware which enforces IsOwner.
-
 package v1
 
 import (
 	"encoding/base64"
-	"fmt"
 
 	"github.com/Kr3mu/runfive/internal/models"
 	"github.com/gofiber/fiber/v3"
-	"github.com/gofiber/fiber/v3/client"
 	"github.com/joho/godotenv"
+
+	gofiberclient "github.com/gofiber/fiber/v3/client"
 )
 
 // envPath is the file where Discord credentials are persisted.
 const envPath = ".env"
 
 // verifyDiscordCredentials tests the given client ID and secret against
-// the Discord API using a client_credentials grant. Returns nil if the
-// credentials are valid, or a descriptive error if Discord rejects them.
+// the Discord API using a client_credentials grant.
 func verifyDiscordCredentials(clientId, clientSecret string) error {
-	cc := client.New()
+	cc := gofiberclient.New()
 
-	// Use Basic auth (base64 of client_id:client_secret) per Discord docs.
-	resp, err := cc.Post("https://discord.com/api/oauth2/token", client.Config{
+	resp, err := cc.Post("https://discord.com/api/oauth2/token", gofiberclient.Config{
 		Header: map[string]string{
 			"Content-Type":  "application/x-www-form-urlencoded",
 			"Authorization": "Basic " + base64.StdEncoding.EncodeToString([]byte(clientId+":"+clientSecret)),
@@ -35,23 +29,30 @@ func verifyDiscordCredentials(clientId, clientSecret string) error {
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("failed to reach Discord: %w", err)
+		return fiber.NewError(fiber.StatusBadGateway, "failed to reach Discord")
 	}
 	defer resp.Close()
 
 	if resp.StatusCode() == fiber.StatusUnauthorized {
-		return fmt.Errorf("invalid client_id or client_secret")
+		return fiber.NewError(fiber.StatusBadRequest, "invalid client_id or client_secret")
 	}
 	if resp.StatusCode() != fiber.StatusOK {
-		return fmt.Errorf("Discord returned status %d", resp.StatusCode())
+		return fiber.NewError(fiber.StatusBadGateway, "Discord returned unexpected status")
 	}
 
 	return nil
 }
 
-// SaveDiscordAuthentication validates and persists Discord OAuth credentials.
-// The credentials are verified against the Discord API before being written
-// to the .env file so the owner gets immediate feedback on typos.
+// DiscordStatus returns whether Discord OAuth2 is configured and working.
+// Reads credentials from the .env file and does a live verify against Discord.
+// GET /v1/auth/master/discord-status
+func (h *AuthHandler) DiscordStatus(c fiber.Ctx) error {
+	return c.JSON(fiber.Map{
+		"configured": h.discord.IsConfigured(),
+	})
+}
+
+// SaveDiscordAuthentication validates, persists, and hot-reloads Discord OAuth credentials.
 //
 // POST /v1/auth/master/savediscord
 func (h *AuthHandler) SaveDiscordAuthentication(c fiber.Ctx) error {
@@ -61,12 +62,12 @@ func (h *AuthHandler) SaveDiscordAuthentication(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
 	}
 
-	// Validate against Discord before persisting — catches wrong credentials early.
-	if err := verifyDiscordCredentials(req.ClientId, req.ClientSecret); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	if !(req.ClientId == "" || req.ClientSecret == "") {
+		if err := verifyDiscordCredentials(req.ClientId, req.ClientSecret); err != nil {
+			return err
+		}
 	}
 
-	// Read existing .env to preserve other keys, then merge Discord credentials.
 	envMap, _ := godotenv.Read(envPath)
 	if envMap == nil {
 		envMap = make(map[string]string)
@@ -79,12 +80,13 @@ func (h *AuthHandler) SaveDiscordAuthentication(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to write .env")
 	}
 
+	// Hot-reload — no restart needed.
+	h.discord.Reconfigure(req.ClientId, req.ClientSecret)
+
 	return c.SendStatus(fiber.StatusOK)
 }
 
-// GetDiscordAuthentication returns the currently configured Discord OAuth
-// credentials so the frontend can pre-fill the form. Called on page load
-// of the Master Actions panel.
+// GetDiscordAuthentication returns the currently configured Discord OAuth credentials.
 //
 // GET /v1/auth/master/getdiscord
 func (h *AuthHandler) GetDiscordAuthentication(c fiber.Ctx) error {

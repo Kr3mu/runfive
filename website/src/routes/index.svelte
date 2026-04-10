@@ -1,32 +1,44 @@
 <script lang="ts">
-    import { theme } from '$lib/theme.svelte';
-    import Logo from '$lib/components/logo.svelte';
-    import Cfxre from '$lib/components/icons/cfxre.svelte';
-    import Sun from '@lucide/svelte/icons/sun';
-    import Moon from '@lucide/svelte/icons/moon';
-    import Eye from '@lucide/svelte/icons/eye';
-    import EyeOff from '@lucide/svelte/icons/eye-off';
-    import LoaderCircle from '@lucide/svelte/icons/loader-circle';
-    import Check from '@lucide/svelte/icons/check';
-    import X from '@lucide/svelte/icons/x';
-    import { login, register, fetchSetupStatus } from '$lib/api/auth';
+    import { theme } from "$lib/theme.svelte";
+    import Logo from "$lib/components/logo.svelte";
+    import Cfxre from "$lib/components/icons/cfxre.svelte";
+    import Sun from "@lucide/svelte/icons/sun";
+    import Moon from "@lucide/svelte/icons/moon";
+    import Eye from "@lucide/svelte/icons/eye";
+    import EyeOff from "@lucide/svelte/icons/eye-off";
+    import LoaderCircle from "@lucide/svelte/icons/loader-circle";
+    import Check from "@lucide/svelte/icons/check";
+    import X from "@lucide/svelte/icons/x";
+    import {
+        login,
+        register,
+        fetchSetupStatus,
+        fetchDiscordStatus,
+    } from "$lib/api/auth";
+    import Discord from "$lib/components/icons/discord.svelte";
+    import { toast } from "svelte-sonner";
 
-    type LoginState = 'idle' | 'loading' | 'success' | 'transition' | 'error';
+    type LoginState = "idle" | "loading" | "success" | "transition" | "error";
 
-    let username = $state('');
-    let password = $state('');
+    let username = $state("");
+    let password = $state("");
     let showPassword = $state(false);
-    let loginState = $state<LoginState>('idle');
-    let errorMessage = $state('');
+    let loginState = $state<LoginState>("idle");
+    let errorMessage = $state("");
     let logoEl = $state<HTMLElement | null>(null);
-    let logoRect = $state<{ top: number; left: number; width: number } | null>(null);
+    let logoRect = $state<{ top: number; left: number; width: number } | null>(
+        null,
+    );
     let needsSetup = $state<boolean | null>(null);
+    let discordStatus = $state(false);
 
     const isSubmitting = $derived(
-        loginState === 'loading' || loginState === 'success' || loginState === 'transition',
+        loginState === "loading" ||
+            loginState === "success" ||
+            loginState === "transition",
     );
 
-    const buttonLabel = $derived(needsSetup ? 'Create Account' : 'Sign in');
+    const buttonLabel = $derived(needsSetup ? "Create Account" : "Sign in");
 
     $effect((): void => {
         fetchSetupStatus()
@@ -36,6 +48,14 @@
             .catch((): void => {
                 needsSetup = false;
             });
+
+        fetchDiscordStatus()
+            .then((status) => {
+                discordStatus = status;
+            })
+            .catch(() => {
+                toast.error("Failed to fetch discord login status");
+            });
     });
 
     function handleLogin(e: SubmitEvent): void {
@@ -43,8 +63,8 @@
         if (isSubmitting) return;
         if (needsSetup === null) return;
 
-        loginState = 'loading';
-        errorMessage = '';
+        loginState = "loading";
+        errorMessage = "";
 
         const action: Promise<unknown> = needsSetup
             ? register(username, password)
@@ -52,36 +72,48 @@
 
         action
             .then((): void => {
-                loginState = 'success';
+                loginState = "success";
                 setTimeout((): void => {
                     if (logoEl) {
                         const rect: DOMRect = logoEl.getBoundingClientRect();
-                        logoRect = { top: rect.top, left: rect.left, width: rect.width };
+                        logoRect = {
+                            top: rect.top,
+                            left: rect.left,
+                            width: rect.width,
+                        };
                     }
-                    loginState = 'transition';
+                    loginState = "transition";
                     setTimeout((): void => {
-                        window.location.href = '/dashboard';
+                        window.location.href = "/dashboard";
                     }, 1200);
                 }, 800);
             })
             .catch((err: unknown): void => {
-                loginState = 'error';
+                loginState = "error";
                 errorMessage =
-                    err instanceof Error ? err.message : 'Authentication failed';
+                    err instanceof Error
+                        ? err.message
+                        : "Authentication failed";
                 setTimeout((): void => {
-                    loginState = 'idle';
+                    loginState = "idle";
                 }, 2000);
             });
     }
 
     function handleCfxLogin(): void {
         if (isSubmitting) return;
-        loginState = 'loading';
-        window.location.href = '/v1/auth/cfx';
+        loginState = "loading";
+        window.location.href = "/v1/auth/cfx";
+    }
+
+    function handleDiscordLogin(): void {
+        if (isSubmitting) return;
+        loginState = "loading";
+        window.location.href = "/v1/auth/discord";
     }
 </script>
 
-{#if loginState === 'transition' && logoRect}
+{#if loginState === "transition" && logoRect}
     <div class="fixed inset-0 z-50 bg-background">
         <div
             class="logo-transition"
@@ -98,14 +130,14 @@
 
 <main
     class="relative flex flex-1 items-center justify-center bg-background px-4 transition-opacity duration-500"
-    class:opacity-0={loginState === 'transition'}
+    class:opacity-0={loginState === "transition"}
 >
     <button
         onclick={theme.toggle}
         class="absolute top-6 right-6 text-muted-foreground transition-colors hover:text-foreground"
         aria-label="Toggle theme"
     >
-        {#if theme.value === 'dark'}
+        {#if theme.value === "dark"}
             <Sun size={18} />
         {:else}
             <Moon size={18} />
@@ -117,7 +149,7 @@
             <div
                 bind:this={logoEl}
                 class="mb-3 w-52"
-                class:animate-pulse={loginState === 'loading'}
+                class:animate-pulse={loginState === "loading"}
             >
                 <Logo class="w-full" />
             </div>
@@ -144,7 +176,10 @@
                     bind:value={username}
                     autocomplete="username"
                     disabled={isSubmitting}
-                    class="h-10 w-full rounded-md border bg-background px-3 text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground/50 focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50 {loginState === 'error' ? 'border-destructive' : 'border-border'}"
+                    class="h-10 w-full rounded-md border bg-background px-3 text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground/50 focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50 {loginState ===
+                    'error'
+                        ? 'border-destructive'
+                        : 'border-border'}"
                     placeholder="admin"
                 />
             </div>
@@ -159,18 +194,25 @@
                 <div class="relative">
                     <input
                         id="password"
-                        type={showPassword ? 'text' : 'password'}
+                        type={showPassword ? "text" : "password"}
                         bind:value={password}
-                        autocomplete={needsSetup ? 'new-password' : 'current-password'}
+                        autocomplete={needsSetup
+                            ? "new-password"
+                            : "current-password"}
                         disabled={isSubmitting}
-                        class="h-10 w-full rounded-md border bg-background pr-10 pl-3 text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground/50 focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50 {loginState === 'error' ? 'border-destructive' : 'border-border'}"
+                        class="h-10 w-full rounded-md border bg-background pr-10 pl-3 text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground/50 focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50 {loginState ===
+                        'error'
+                            ? 'border-destructive'
+                            : 'border-border'}"
                         placeholder="••••••••"
                     />
                     <button
                         type="button"
                         onclick={() => (showPassword = !showPassword)}
                         class="absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
-                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        aria-label={showPassword
+                            ? "Hide password"
+                            : "Show password"}
                     >
                         {#if showPassword}
                             <EyeOff size={16} />
@@ -184,15 +226,20 @@
             <button
                 type="submit"
                 disabled={isSubmitting || needsSetup === null}
-                class="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-md font-heading text-sm font-semibold tracking-wide transition-all disabled:cursor-not-allowed {loginState === 'success' ? 'bg-emerald-500 text-white' : loginState === 'error' ? 'animate-shake bg-red-600 text-white' : 'bg-primary text-primary-foreground hover:opacity-90 active:opacity-80'}"
+                class="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-md font-heading text-sm font-semibold tracking-wide transition-all disabled:cursor-not-allowed {loginState ===
+                'success'
+                    ? 'bg-emerald-500 text-white'
+                    : loginState === 'error'
+                      ? 'animate-shake bg-red-600 text-white'
+                      : 'bg-primary text-primary-foreground hover:opacity-90 active:opacity-80'}"
             >
-                {#if loginState === 'loading'}
+                {#if loginState === "loading"}
                     <LoaderCircle size={16} class="animate-spin" />
-                    {needsSetup ? 'Creating account...' : 'Signing in...'}
-                {:else if loginState === 'success'}
+                    {needsSetup ? "Creating account..." : "Signing in..."}
+                {:else if loginState === "success"}
                     <Check size={16} />
-                    {needsSetup ? 'Account created' : 'Welcome back'}
-                {:else if loginState === 'error'}
+                    {needsSetup ? "Account created" : "Welcome back"}
+                {:else if loginState === "error"}
                     <X size={16} />
                     {errorMessage}
                 {:else}
@@ -217,6 +264,17 @@
                 <Cfxre class="h-4 w-auto" />
                 Sign in with Cfx.re
             </button>
+            {#if discordStatus}
+                <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onclick={handleDiscordLogin}
+                    class="flex h-10 w-full mt-4 items-center justify-center gap-2.5 rounded-md bg-[#7289DA] text-sm font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                    <Discord class="h-4 w-auto" />
+                    Sign in with Discord
+                </button>
+            {/if}
         {/if}
 
         <p class="mt-8 text-center text-xs text-muted-foreground/50">

@@ -4,6 +4,7 @@ package v1
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/Kr3mu/runfive/internal/auth"
@@ -14,23 +15,19 @@ import (
 
 // AuthHandler groups all auth-related HTTP handlers and their dependencies.
 type AuthHandler struct {
-	// db is the database connection
-	db *gorm.DB
-	// sm manages server-side sessions
-	sm *auth.SessionManager
-	// cfx handles the Discourse User API Key auth flow
-	cfx *auth.CfxAuth
-	// fieldEncryptor encrypts sensitive fields like Cfx API keys before DB storage
+	db             *gorm.DB
+	sm             *auth.SessionManager
+	cfx            *auth.CfxAuth
+	discord        *auth.DiscordAuth
 	fieldEncryptor *auth.FieldEncryptor
 }
 
 // NewAuthHandler creates the auth handler with its dependencies.
-func NewAuthHandler(db *gorm.DB, sm *auth.SessionManager, cfx *auth.CfxAuth, fe *auth.FieldEncryptor) *AuthHandler {
-	return &AuthHandler{db: db, sm: sm, cfx: cfx, fieldEncryptor: fe}
+func NewAuthHandler(db *gorm.DB, sm *auth.SessionManager, cfx *auth.CfxAuth, discord *auth.DiscordAuth, fe *auth.FieldEncryptor) *AuthHandler {
+	return &AuthHandler{db: db, sm: sm, cfx: cfx, discord: discord, fieldEncryptor: fe}
 }
 
 // SetupStatus returns whether the application needs initial setup.
-// When no users exist, the frontend shows a registration form instead of login.
 //
 // GET /v1/auth/setup-status
 func (h *AuthHandler) SetupStatus(c fiber.Ctx) error {
@@ -41,8 +38,7 @@ func (h *AuthHandler) SetupStatus(c fiber.Ctx) error {
 	return c.JSON(models.SetupStatusResponse{NeedsSetup: count == 0})
 }
 
-// Register creates the master (owner) account. Only succeeds when no users
-// exist in the database — subsequent calls return 403.
+// Register creates the master (owner) account. Only succeeds when no users exist.
 //
 // POST /v1/auth/register
 func (h *AuthHandler) Register(c fiber.Ctx) error {
@@ -85,15 +81,6 @@ func (h *AuthHandler) Register(c fiber.Ctx) error {
 
 	return c.Status(fiber.StatusCreated).JSON(buildMeResponse(&user))
 }
-
-// TODO: Implement magic-link invite flow for creating subsequent user accounts.
-// Register (above) only bootstraps the first owner account — all other users
-// must be invited by an existing user. Flow: authenticated user POSTs an
-// email/identifier, backend generates a single-use signed token, emails a
-// link like /invite/accept?token=..., recipient opens it and sets a password
-// (and/or links cfx.re). Tokens should expire (~24h) and be stored hashed in
-// a new invites table. This is the missing signup path that pairs with
-// commit 59d3c2d (OAuth is login-only, never creates accounts).
 
 // Login authenticates a user with username and password.
 //
@@ -149,10 +136,6 @@ func (h *AuthHandler) Logout(c fiber.Ctx) error {
 // Me returns the currently authenticated user's profile.
 //
 // GET /v1/auth/me
-//
-// TODO: Include the user's server-scoped roles/permissions in the response
-// so the frontend can render UI based on what the user is allowed to do
-// per server (e.g. hide admin tabs, disable actions).
 func (h *AuthHandler) Me(c fiber.Ctx) error {
 	user := auth.GetUser(c)
 	if user == nil {
@@ -181,8 +164,8 @@ func (h *AuthHandler) Sessions(c fiber.Ctx) error {
 	response := make([]models.SessionResponse, 0, len(sessions))
 	for _, s := range sessions {
 		response = append(response, models.SessionResponse{
-			ID:        s.ID,
-			UserAgent: s.UserAgent,
+			ID:         s.ID,
+			UserAgent:  s.UserAgent,
 			CreatedAt:  s.CreatedAt.Format(time.RFC3339),
 			LastSeenAt: s.LastSeenAt.Format(time.RFC3339),
 			IsCurrent:  s.TokenHash == currentHash,
@@ -226,7 +209,7 @@ func (h *AuthHandler) RevokeSession(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// createSessionForUser creates an SCS session and tracks it in user_sessions.
+// createSessionForUser creates a session and tracks it in user_sessions.
 func (h *AuthHandler) createSessionForUser(c fiber.Ctx, user *models.User) error {
 	token, err := h.sm.CreateSession(c, user.ID)
 	if err != nil {
@@ -249,21 +232,19 @@ func (h *AuthHandler) createSessionForUser(c fiber.Ctx, user *models.User) error
 // GET /v1/auth/cfx
 func (h *AuthHandler) CfxRedirect(c fiber.Ctx) error {
 	var linkUserID *uint
-	user := auth.GetUser(c)
-	if user != nil {
+	if user := auth.GetUser(c); user != nil {
 		linkUserID = &user.ID
 	}
 
 	redirectURL, err := h.cfx.StartAuth(linkUserID)
 	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, "failed to start cfx auth")
+		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("failed to start cfx auth: %s", err))
 	}
 
 	return c.Redirect().To(redirectURL)
 }
 
-// CfxCallback handles the redirect back from forum.cfx.re with the
-// encrypted User API Key payload.
+// CfxCallback handles the redirect back from forum.cfx.re.
 //
 // GET /v1/auth/cfx/callback
 func (h *AuthHandler) CfxCallback(c fiber.Ctx) error {
@@ -303,18 +284,83 @@ func (h *AuthHandler) CfxCallback(c fiber.Ctx) error {
 	if result.Error != nil && !errors.Is(result.Error, gorm.ErrRecordNotFound) {
 		return c.Redirect().To("/?error=database_error")
 	}
-
 	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 		return c.Redirect().To("/?error=account_not_found")
 	}
 
-	{
-		h.db.Model(&user).Updates(map[string]interface{}{
-			"cfx_username":   userData.Username,
-			"cfx_avatar_url": avatarURL,
-			"cfx_api_key":    encryptedKey,
-		})
+	h.db.Model(&user).Updates(map[string]interface{}{
+		"cfx_username":   userData.Username,
+		"cfx_avatar_url": avatarURL,
+		"cfx_api_key":    encryptedKey,
+	})
+
+	if err := h.createSessionForUser(c, &user); err != nil {
+		return c.Redirect().To("/?error=session_failed")
 	}
+
+	return c.Redirect().To("/dashboard")
+}
+
+// DiscordRedirect initiates the Discord OAuth2 flow.
+// If the user is already authenticated, this becomes an account-linking flow.
+//
+// GET /v1/auth/discord
+func (h *AuthHandler) DiscordRedirect(c fiber.Ctx) error {
+	var linkUserID *uint
+	if user := auth.GetUser(c); user != nil {
+		linkUserID = &user.ID
+	}
+
+	redirectURL, err := h.discord.StartAuth(linkUserID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("failed to start discord auth: %s", err))
+	}
+
+	return c.Redirect().To(redirectURL)
+}
+
+// DiscordCallback handles the redirect back from Discord with the OAuth2 code.
+//
+// GET /v1/auth/discord/callback
+func (h *AuthHandler) DiscordCallback(c fiber.Ctx) error {
+	state := c.Query("state")
+	code := c.Query("code")
+	if state == "" || code == "" {
+		return c.Redirect().To("/?error=invalid_callback")
+	}
+
+	userData, _, linkUserID, err := h.discord.HandleCallback(state, code)
+	if err != nil {
+		return c.Redirect().To("/?error=auth_failed")
+	}
+
+	avatarURL := userData.AvatarURL()
+
+	if linkUserID != nil {
+		result := h.db.Model(&models.User{}).Where("id = ?", *linkUserID).Updates(map[string]interface{}{
+			"discord_id":       userData.ID,
+			"discord_username": userData.Username,
+			"discord_avatar":   avatarURL,
+		})
+		if result.Error != nil {
+			return c.Redirect().To("/dashboard?error=link_failed")
+		}
+		return c.Redirect().To("/dashboard")
+	}
+
+	var user models.User
+	result := h.db.Where("discord_id = ?", userData.ID).First(&user)
+	if result.Error != nil && !errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return c.Redirect().To("/?error=database_error")
+	}
+	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return c.Redirect().To("/?error=account_not_found")
+	}
+
+	h.db.Model(&user).Updates(map[string]interface{}{
+		"discord_username": userData.Username,
+		"discord_avatar":   avatarURL,
+	})
 
 	if err := h.createSessionForUser(c, &user); err != nil {
 		return c.Redirect().To("/?error=session_failed")

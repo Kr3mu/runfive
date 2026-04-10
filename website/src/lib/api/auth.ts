@@ -111,6 +111,12 @@ export async function fetchSetupStatus(): Promise<SetupStatus> {
   return (await res.json()) as SetupStatus;
 }
 
+export async function fetchDiscordStatus(): Promise<boolean> {
+  const res: Response = await fetch('/v1/auth/discord-status');
+  if (!res.ok) throw new Error(`GET /v1/auth/discord-status failed: ${res.status}`);
+  return (await res.json())?.configured as boolean ?? false;
+}
+
 /**
  * Registers the master account. Only works when no users exist.
  *
