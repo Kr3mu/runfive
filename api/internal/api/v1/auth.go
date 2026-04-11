@@ -11,6 +11,7 @@ import (
 
 	"github.com/Kr3mu/runfive/internal/auth"
 	"github.com/Kr3mu/runfive/internal/models"
+	"github.com/Kr3mu/runfive/internal/permissions"
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
 )
@@ -96,7 +97,7 @@ func (h *AuthHandler) Register(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to create session")
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(buildMeResponse(&user))
+	return c.Status(fiber.StatusCreated).JSON(buildMeResponse(&user, nil))
 }
 
 // Login authenticates a user with username and password.
@@ -140,7 +141,7 @@ func (h *AuthHandler) Login(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to create session")
 	}
 
-	return c.JSON(buildMeResponse(&user))
+	return c.JSON(buildMeResponse(&user, nil))
 }
 
 // Logout destroys the current session and clears the cookie.
@@ -162,7 +163,8 @@ func (h *AuthHandler) Logout(c fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// Me returns the currently authenticated user's profile.
+// Me returns the currently authenticated user's profile including resolved
+// RBAC permissions for both global and per-server scopes.
 //
 // GET /v1/auth/me
 func (h *AuthHandler) Me(c fiber.Ctx) error {
@@ -170,7 +172,8 @@ func (h *AuthHandler) Me(c fiber.Ctx) error {
 	if user == nil {
 		return fiber.NewError(fiber.StatusUnauthorized, "not authenticated")
 	}
-	return c.JSON(buildMeResponse(user))
+	perms := auth.GetPermissions(c)
+	return c.JSON(buildMeResponse(user, perms))
 }
 
 // Sessions lists all active sessions for the authenticated user.
@@ -457,12 +460,14 @@ func (h *AuthHandler) DiscordCallback(c fiber.Ctx) error {
 	return c.Redirect().To("/dashboard")
 }
 
-// buildMeResponse converts a User model into the API response DTO.
-func buildMeResponse(user *models.User) models.MeResponse {
+// buildMeResponse converts a User model and resolved permissions into the API response DTO.
+func buildMeResponse(user *models.User, perms *permissions.ResolvedPermissions) models.MeResponse {
 	resp := models.MeResponse{
-		ID:       user.ID,
-		Username: user.Username,
-		IsOwner:  user.IsOwner,
+		ID:                user.ID,
+		Username:          user.Username,
+		IsOwner:           user.IsOwner,
+		GlobalPermissions: make(map[string]map[string]bool),
+		ServerPermissions: make(map[string]models.ServerPermissionEntry),
 	}
 
 	if user.CfxID != nil {
@@ -494,6 +499,30 @@ func buildMeResponse(user *models.User) models.MeResponse {
 			ID:       *user.DiscordID,
 			Username: discordUsername,
 			Avatar:   avatar,
+		}
+	}
+
+	if perms != nil {
+		resp.GlobalPermissions = perms.Global
+		if perms.GlobalRole != nil {
+			resp.GlobalRole = &models.RoleInfo{
+				ID:    perms.GlobalRole.ID,
+				Name:  perms.GlobalRole.Name,
+				Color: perms.GlobalRole.Color,
+			}
+		}
+		for serverID, serverPerms := range perms.Servers {
+			entry := models.ServerPermissionEntry{
+				Permissions: serverPerms,
+			}
+			if meta, ok := perms.ServerRoles[serverID]; ok {
+				entry.Role = models.RoleInfo{
+					ID:    meta.ID,
+					Name:  meta.Name,
+					Color: meta.Color,
+				}
+			}
+			resp.ServerPermissions[serverID] = entry
 		}
 	}
 

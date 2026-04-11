@@ -1,7 +1,10 @@
-// Package auth provides Fiber middleware for session-based authentication.
+// Package auth provides Fiber middleware for session-based authentication
+// and RBAC permission enforcement.
 //
 // Loads the session from the cookie, resolves the user from the database,
 // and stores both in Fiber locals for downstream handlers.
+// Permission middleware loads role-based permissions once per request and
+// provides RequireGlobalPerm / RequireServerPerm guards.
 package auth
 
 import (
@@ -12,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Kr3mu/runfive/internal/models"
+	"github.com/Kr3mu/runfive/internal/permissions"
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
 )
@@ -21,6 +25,8 @@ const (
 	localsUserKey = "user"
 	// localsTokenKey is the Fiber locals key for the raw session token.
 	localsTokenKey = "sessionToken"
+	// localsPermsKey is the Fiber locals key for resolved permissions.
+	localsPermsKey = "permissions"
 	// lastSeenDebounce prevents updating last_seen_at more than once per minute.
 	lastSeenDebounce = time.Minute
 )
@@ -66,6 +72,81 @@ func RequireAuth(sm *SessionManager, db *gorm.DB) fiber.Handler {
 
 		return c.Next()
 	}
+}
+
+// LoadPermissions returns Fiber middleware that loads the user's RBAC permissions
+// once per request. Must be chained after RequireAuth. Stores the resolved
+// permissions in c.Locals("permissions") for use by RequireGlobalPerm and
+// RequireServerPerm.
+func LoadPermissions(db *gorm.DB) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		user := GetUser(c)
+		if user == nil {
+			return fiber.NewError(fiber.StatusUnauthorized, "authentication required")
+		}
+		perms, err := permissions.LoadForUser(db, user)
+		if err != nil {
+			log.Printf("permission load error for user %d: %v", user.ID, err)
+			return fiber.NewError(fiber.StatusInternalServerError, "failed to load permissions")
+		}
+		c.Locals(localsPermsKey, perms)
+		return c.Next()
+	}
+}
+
+// RequireGlobalPerm returns Fiber middleware that checks a panel-wide permission.
+// Must be chained after LoadPermissions. Owner always bypasses.
+func RequireGlobalPerm(resource, action string) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		perms := GetPermissions(c)
+		if perms == nil {
+			return fiber.NewError(fiber.StatusForbidden, "no permissions loaded")
+		}
+		if perms.IsOwner {
+			return c.Next()
+		}
+		if !perms.Global.Has(resource, action) {
+			return fiber.NewError(fiber.StatusForbidden, "insufficient permissions")
+		}
+		return c.Next()
+	}
+}
+
+// RequireServerPerm returns Fiber middleware that checks a per-server permission.
+// Reads the server ID from the ":serverId" route parameter.
+// Must be chained after LoadPermissions. Owner always bypasses.
+func RequireServerPerm(resource, action string) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		perms := GetPermissions(c)
+		if perms == nil {
+			return fiber.NewError(fiber.StatusForbidden, "no permissions loaded")
+		}
+		if perms.IsOwner {
+			return c.Next()
+		}
+		serverID := c.Params("serverId")
+		if serverID == "" {
+			return fiber.NewError(fiber.StatusBadRequest, "missing server ID")
+		}
+		serverPerms, ok := perms.Servers[serverID]
+		if !ok {
+			return fiber.NewError(fiber.StatusForbidden, "no access to this server")
+		}
+		if !serverPerms.Has(resource, action) {
+			return fiber.NewError(fiber.StatusForbidden, "insufficient permissions")
+		}
+		return c.Next()
+	}
+}
+
+// GetPermissions extracts the resolved permissions from Fiber locals.
+// Returns nil if permissions have not been loaded.
+func GetPermissions(c fiber.Ctx) *permissions.ResolvedPermissions {
+	p, ok := c.Locals(localsPermsKey).(*permissions.ResolvedPermissions)
+	if !ok {
+		return nil
+	}
+	return p
 }
 
 // RequireMaster is Fiber middleware that restricts access to the owner (master)
