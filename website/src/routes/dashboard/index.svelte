@@ -25,7 +25,7 @@
     <GridStack
         bind:items={dashboardState.layout}
         columns={12}
-        rowHeight={80}
+        cellHeight={80}
         margin={4}
         onchange={handleLayoutChange}
     >

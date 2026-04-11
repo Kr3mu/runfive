@@ -7,7 +7,10 @@
  * @see MeResponse for the authenticated user shape
  */
 
-import { queryOptions } from '@tanstack/svelte-query';
+import {
+  queryOptions,
+  type UndefinedInitialDataOptions,
+} from '@tanstack/svelte-query';
 
 /** Linked Cfx.re account information. */
 interface CfxInfo {
@@ -92,7 +95,12 @@ async function fetchMe(): Promise<AuthUser | null> {
 }
 
 /** TanStack Query options for the authenticated user. */
-export const authQueryOptions = () =>
+export const authQueryOptions = (): UndefinedInitialDataOptions<
+  AuthUser | null,
+  Error,
+  AuthUser | null,
+  string[]
+> =>
   queryOptions({
     queryKey: ['auth', 'me'],
     queryFn: fetchMe,
@@ -118,18 +126,25 @@ export async function fetchDiscordStatus(): Promise<boolean> {
 }
 
 /**
- * Registers the master account. Only works when no users exist.
+ * Registers the master account. Only works when no users exist AND the
+ * caller provides the setup code printed to the server console on first
+ * startup.
  *
  * @param username - Desired username
  * @param password - Plaintext password (min 8 chars)
+ * @param code - Formatted setup token ("xxxx-xxxx") from the server console
  * @returns Created user profile
- * @throws Error if registration fails (setup already completed, username taken, etc.)
+ * @throws Error if registration fails (invalid code, setup already completed, etc.)
  */
-export async function register(username: string, password: string): Promise<AuthUser> {
+export async function register(
+  username: string,
+  password: string,
+  code: string,
+): Promise<AuthUser> {
   const res: Response = await fetch('/v1/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password, code }),
   });
   if (!res.ok) {
     const body: { error: string } = (await res.json()) as { error: string };

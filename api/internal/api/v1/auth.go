@@ -20,11 +20,15 @@ type AuthHandler struct {
 	cfx            *auth.CfxAuth
 	discord        *auth.DiscordAuth
 	fieldEncryptor *auth.FieldEncryptor
+	// setupToken gates the initial owner-account /register endpoint with an
+	// ephemeral code printed to the server console at first startup.
+	setupToken *auth.SetupTokenStore
 }
 
 // NewAuthHandler creates the auth handler with its dependencies.
-func NewAuthHandler(db *gorm.DB, sm *auth.SessionManager, cfx *auth.CfxAuth, discord *auth.DiscordAuth, fe *auth.FieldEncryptor) *AuthHandler {
-	return &AuthHandler{db: db, sm: sm, cfx: cfx, discord: discord, fieldEncryptor: fe}
+
+func NewAuthHandler(db *gorm.DB, sm *auth.SessionManager, cfx *auth.CfxAuth, fe *auth.FieldEncryptor, discord *auth.DiscordAuth, st *auth.SetupTokenStore) *AuthHandler {
+  return &AuthHandler{db: db, sm: sm, cfx: cfx, fieldEncryptor: fe, discord: discord, setupToken: st}
 }
 
 // SetupStatus returns whether the application needs initial setup.
@@ -38,8 +42,10 @@ func (h *AuthHandler) SetupStatus(c fiber.Ctx) error {
 	return c.JSON(models.SetupStatusResponse{NeedsSetup: count == 0})
 }
 
-// Register creates the master (owner) account. Only succeeds when no users exist.
-//
+
+// Register creates the master (owner) account. Only succeeds when no users
+// exist in the database AND the caller supplies the setup code printed to
+// the server console at first startup. Subsequent calls return 403.
 // POST /v1/auth/register
 func (h *AuthHandler) Register(c fiber.Ctx) error {
 	var req models.RegisterRequest
@@ -51,6 +57,13 @@ func (h *AuthHandler) Register(c fiber.Ctx) error {
 	}
 	if len(req.Password) < 8 {
 		return fiber.NewError(fiber.StatusBadRequest, "password must be at least 8 characters")
+	}
+
+	if !h.setupToken.IsActive() {
+		return fiber.NewError(fiber.StatusForbidden, "setup already completed")
+	}
+	if !h.setupToken.Match(req.Code) {
+		return fiber.NewError(fiber.StatusForbidden, "invalid setup code")
 	}
 
 	var count int64
@@ -75,6 +88,8 @@ func (h *AuthHandler) Register(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusConflict, "username already taken")
 	}
 
+	h.setupToken.Clear()
+
 	if err := h.createSessionForUser(c, &user); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to create session")
 	}
@@ -89,6 +104,12 @@ func (h *AuthHandler) Login(c fiber.Ctx) error {
 	var req models.LoginRequest
 	if err := c.Bind().Body(&req); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+	if len(req.Username) < 3 || len(req.Username) > 32 {
+		return fiber.NewError(fiber.StatusBadRequest, "username must be 3-32 characters")
+	}
+	if len(req.Password) < 8 {
+		return fiber.NewError(fiber.StatusBadRequest, "password must be at least 8 characters")
 	}
 
 	var user models.User

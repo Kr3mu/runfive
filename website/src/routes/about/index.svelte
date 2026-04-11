@@ -1,7 +1,22 @@
 <script lang="ts">
+    import { navigate } from "sv-router/generated";
     import Logo from "$lib/components/logo.svelte";
     import Github from "$lib/components/icons/github.svelte";
     import Discord from "$lib/components/icons/discord.svelte";
+
+    /**
+     * Navigate back through browser history when possible, so users return
+     * to the page they came from (e.g. the dashboard) instead of being routed
+     * through `/`, which would trigger a full reload via the auth redirect.
+     * Falls back to the home route when this is the first entry in history.
+     */
+    function handleBack(): void {
+        if (window.history.length > 1) {
+            void navigate(-1);
+            return;
+        }
+        void navigate("/");
+    }
 </script>
 
 <main class="flex flex-1 flex-col bg-background">
@@ -81,6 +96,29 @@
             >
                 <Discord class="h-5 w-5" />
             </a>
+        </div>
+
+        <div class="about-reveal mt-10 flex justify-center delay-4">
+            <button
+                type="button"
+                onclick={handleBack}
+                class="group inline-flex cursor-pointer items-center gap-2 text-xs tracking-widest text-muted-foreground/40 uppercase transition-colors hover:text-foreground"
+            >
+                <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="h-3.5 w-3.5 transition-transform group-hover:-translate-x-0.5"
+                    aria-hidden="true"
+                >
+                    <path d="M19 12H5" />
+                    <path d="m12 19-7-7 7-7" />
+                </svg>
+                Back
+            </button>
         </div>
 
     </div>

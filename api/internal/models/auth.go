@@ -15,6 +15,9 @@ type RegisterRequest struct {
 	Username string `json:"username" validate:"required,min=3,max=32"`
 	// Plaintext password (min 8 chars)
 	Password string `json:"password" validate:"required,min=8"`
+	// Code is the formatted setup token ("xxxx-xxxx") printed to the
+	// server console at first startup. Required to bootstrap the owner.
+	Code string `json:"code" validate:"required,len=9"`
 }
 
 // MeResponse is returned by GET /v1/auth/me.
