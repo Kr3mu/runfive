@@ -47,7 +47,7 @@ func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *a
 	protected.Get("/sessions", authHandler.Sessions)
 	protected.Delete("/sessions/:id", authHandler.RevokeSession)
 
-  // Invite endpoints
+	// Invite endpoints
 	inviteHandler := NewInviteHandler(db, sm, baseURL)
 	inviteGroup := r.Group("/invites")
 
@@ -66,7 +66,7 @@ func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *a
 	userGroup.Post("/:id/suspend", userHandler.Suspend)
 	userGroup.Post("/:id/unsuspend", userHandler.Unsuspend)
 	userGroup.Delete("/:id", userHandler.Delete)
-  
+
 	master := protected.Group("/master", auth.RequireMaster)
 	master.Post("/savediscord", authHandler.SaveDiscordAuthentication)
 	master.Get("/getdiscord", authHandler.GetDiscordAuthentication)

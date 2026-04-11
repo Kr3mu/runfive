@@ -5,10 +5,10 @@ package v1
 import (
 	"errors"
 	"fmt"
-	"time"
 	"net/url"
 	"strings"
-  
+	"time"
+
 	"github.com/Kr3mu/runfive/internal/auth"
 	"github.com/Kr3mu/runfive/internal/models"
 	"github.com/gofiber/fiber/v3"
@@ -30,7 +30,7 @@ type AuthHandler struct {
 // NewAuthHandler creates the auth handler with its dependencies.
 
 func NewAuthHandler(db *gorm.DB, sm *auth.SessionManager, cfx *auth.CfxAuth, fe *auth.FieldEncryptor, discord *auth.DiscordAuth, st *auth.SetupTokenStore) *AuthHandler {
-  return &AuthHandler{db: db, sm: sm, cfx: cfx, fieldEncryptor: fe, discord: discord, setupToken: st}
+	return &AuthHandler{db: db, sm: sm, cfx: cfx, fieldEncryptor: fe, discord: discord, setupToken: st}
 }
 
 // SetupStatus returns whether the application needs initial setup.
@@ -43,7 +43,6 @@ func (h *AuthHandler) SetupStatus(c fiber.Ctx) error {
 	}
 	return c.JSON(models.SetupStatusResponse{NeedsSetup: count == 0})
 }
-
 
 // Register creates the master (owner) account. Only succeeds when no users
 // exist in the database AND the caller supplies the setup code printed to
@@ -93,7 +92,7 @@ func (h *AuthHandler) Register(c fiber.Ctx) error {
 
 	h.setupToken.Clear()
 
-	if err := createSessionForUser(h.db, h.sm, c, &user); err != nil {
+	if err := h.CreateSessionForUser(c, &user); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to create session")
 	}
 
@@ -137,7 +136,7 @@ func (h *AuthHandler) Login(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusForbidden, "account suspended")
 	}
 
-	if err := createSessionForUser(h.db, h.sm, c, &user); err != nil {
+	if err := h.CreateSessionForUser(c, &user); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to create session")
 	}
 
@@ -240,8 +239,8 @@ func (h *AuthHandler) RevokeSession(c fiber.Ctx) error {
 }
 
 // createSessionForUser creates a session and tracks it in user_sessions.
-func (h *AuthHandler) createSessionForUser(c fiber.Ctx, user *models.User) error {
-	token, err := h.sm.CreateSession(c, user.ID)
+func createSessionForUser(sm *auth.SessionManager, db *gorm.DB, c fiber.Ctx, user *models.User) error {
+	token, err := sm.CreateSession(c, user.ID)
 	if err != nil {
 		return err
 	}
@@ -253,7 +252,12 @@ func (h *AuthHandler) createSessionForUser(c fiber.Ctx, user *models.User) error
 		CreatedAt:  time.Now(),
 		LastSeenAt: time.Now(),
 	}
+
 	return db.Create(&userSession).Error
+}
+
+func (h *AuthHandler) CreateSessionForUser(c fiber.Ctx, user *models.User) error {
+	return createSessionForUser(h.sm, h.db, c, user)
 }
 
 // CfxRedirect initiates the Cfx.re authentication flow.
@@ -334,7 +338,7 @@ func (h *AuthHandler) CfxCallback(c fiber.Ctx) error {
 		user := models.User{
 			Username:     userData.Username,
 			CfxID:        &userData.ID,
-			CfxUsername:   &userData.Username,
+			CfxUsername:  &userData.Username,
 			CfxAvatarURL: &avatarURL,
 			CfxAPIKey:    encryptedKey,
 		}
@@ -352,7 +356,7 @@ func (h *AuthHandler) CfxCallback(c fiber.Ctx) error {
 			return c.Redirect().To("/invite/accept?token=" + url.QueryEscape(inviteToken) + "&error=registration_failed")
 		}
 
-		if err := createSessionForUser(h.db, h.sm, c, &user); err != nil {
+		if err := h.CreateSessionForUser(c, &user); err != nil {
 			return c.Redirect().To("/?error=session_failed")
 		}
 		return c.Redirect().To("/dashboard")
@@ -368,17 +372,17 @@ func (h *AuthHandler) CfxCallback(c fiber.Ctx) error {
 		return c.Redirect().To("/?error=account_not_found")
 	}
 
-  if user.SuspendedAt != nil {
+	if user.SuspendedAt != nil {
 		return c.Redirect().To("/?error=account_suspended")
 	}
-    
+
 	h.db.Model(&user).Updates(map[string]interface{}{
 		"cfx_username":   userData.Username,
 		"cfx_avatar_url": avatarURL,
 		"cfx_api_key":    encryptedKey,
 	})
 
-	if err := h.createSessionForUser(c, &user); err != nil {
+	if err := h.CreateSessionForUser(c, &user); err != nil {
 		return c.Redirect().To("/?error=session_failed")
 	}
 
@@ -446,7 +450,7 @@ func (h *AuthHandler) DiscordCallback(c fiber.Ctx) error {
 		"discord_avatar":   avatarURL,
 	})
 
-	if err := h.createSessionForUser(c, &user); err != nil {
+	if err := h.CreateSessionForUser(c, &user); err != nil {
 		return c.Redirect().To("/?error=session_failed")
 	}
 

@@ -211,7 +211,7 @@ func (h *InviteHandler) Accept(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusConflict, "username already taken")
 	}
 
-	if err := createSessionForUser(h.db, h.sm, c, &user); err != nil {
+	if err := createSessionForUser(h.sm, h.db, c, &user); err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to create session")
 	}
 

@@ -117,12 +117,14 @@
         urlError && redirectNotices[urlError] ? redirectNotices[urlError] : null,
     );
 
-    if (urlError) {
-        history.replaceState(null, '', '/');
-        if (notice?.autoDismiss) {
-            setTimeout((): void => { notice = null; }, 8000);
+    $effect(() => {
+        if (urlError) {
+            history.replaceState(null, '', '/');
+            if (notice?.autoDismiss) {
+                setTimeout((): void => { notice = null; }, 8000);
+            }
         }
-    }
+    })
 
     /** Eight individual hex characters for the setup code boxes. */
     let codeBoxes = $state<string[]>(['', '', '', '', '', '', '', '']);
