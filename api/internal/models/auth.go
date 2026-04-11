@@ -82,3 +82,14 @@ type SetupStatusResponse struct {
 	// NeedsSetup is true if no users exist and the master account needs to be created.
 	NeedsSetup bool `json:"needsSetup"`
 }
+
+// UserListItem is a single entry in GET /v1/users.
+type UserListItem struct {
+	ID          uint         `json:"id"`
+	Username    string       `json:"username"`
+	IsOwner     bool         `json:"isOwner"`
+	HasPassword bool         `json:"hasPassword"`
+	Providers   ProviderInfo `json:"providers"`
+	SuspendedAt *string      `json:"suspendedAt"`
+	CreatedAt   string       `json:"createdAt"`
+}

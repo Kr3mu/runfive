@@ -91,6 +91,7 @@ func main() {
 		FE:  fe,
     Discord: discord,
 		ST:  setupTokenStore,
+    BaseURL: cfg.BaseURL,
 	})
 
 	if setupURL != "" {

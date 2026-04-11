@@ -9,6 +9,9 @@
     import LoaderCircle from "@lucide/svelte/icons/loader-circle";
     import Check from "@lucide/svelte/icons/check";
     import X from "@lucide/svelte/icons/x";
+    import UserX from '@lucide/svelte/icons/user-x';
+    import Ban from '@lucide/svelte/icons/ban';
+    import CircleAlert from '@lucide/svelte/icons/circle-alert';
     import {
         login,
         register,
@@ -20,8 +23,84 @@
 
     type LoginState = "idle" | "loading" | "success" | "transition" | "error";
 
-    let username = $state("");
-    let password = $state("");
+    interface RedirectNotice {
+        icon: 'user-x' | 'ban' | 'alert';
+        title: string;
+        description: string;
+        borderClass: string;
+        bgClass: string;
+        iconClass: string;
+        autoDismiss: boolean;
+    }
+
+    const redirectNotices: Record<string, RedirectNotice> = {
+        account_not_found: {
+            icon: 'user-x',
+            title: 'Account not found',
+            description: 'No account is linked to this Cfx.re identity. You need an invite from the server owner to join.',
+            borderClass: 'border-border',
+            bgClass: 'bg-muted/50',
+            iconClass: 'text-muted-foreground',
+            autoDismiss: false,
+        },
+        account_suspended: {
+            icon: 'ban',
+            title: 'Account suspended',
+            description: 'Your account has been suspended. Contact the server owner for more information.',
+            borderClass: 'border-amber-500/20',
+            bgClass: 'bg-amber-500/5',
+            iconClass: 'text-amber-500',
+            autoDismiss: false,
+        },
+        auth_failed: {
+            icon: 'alert',
+            title: 'Authentication failed',
+            description: 'The login attempt could not be completed. Please try again.',
+            borderClass: 'border-destructive/20',
+            bgClass: 'bg-destructive/5',
+            iconClass: 'text-destructive',
+            autoDismiss: true,
+        },
+        invalid_callback: {
+            icon: 'alert',
+            title: 'Something went wrong',
+            description: 'The login redirect was incomplete. Please try again.',
+            borderClass: 'border-destructive/20',
+            bgClass: 'bg-destructive/5',
+            iconClass: 'text-destructive',
+            autoDismiss: true,
+        },
+        internal_error: {
+            icon: 'alert',
+            title: 'Something went wrong',
+            description: 'An internal error occurred. Please try again.',
+            borderClass: 'border-destructive/20',
+            bgClass: 'bg-destructive/5',
+            iconClass: 'text-destructive',
+            autoDismiss: true,
+        },
+        session_failed: {
+            icon: 'alert',
+            title: 'Session error',
+            description: 'Could not create your session. Please try again.',
+            borderClass: 'border-destructive/20',
+            bgClass: 'bg-destructive/5',
+            iconClass: 'text-destructive',
+            autoDismiss: true,
+        },
+        database_error: {
+            icon: 'alert',
+            title: 'Something went wrong',
+            description: 'A temporary error occurred. Please try again.',
+            borderClass: 'border-destructive/20',
+            bgClass: 'bg-destructive/5',
+            iconClass: 'text-destructive',
+            autoDismiss: true,
+        },
+    };
+
+    let username = $state('');
+    let password = $state('');
     let showPassword = $state(false);
     let loginState = $state<LoginState>("idle");
     let errorMessage = $state("");
@@ -31,6 +110,21 @@
     );
     let needsSetup = $state<boolean | null>(null);
     let discordStatus = $state(false);
+
+    const urlParams: URLSearchParams = new URLSearchParams(window.location.search);
+    const urlError: string | null = urlParams.get('error');
+    let notice = $state<RedirectNotice | null>(
+        urlError && redirectNotices[urlError] ? redirectNotices[urlError] : null,
+    );
+
+    $effect(() => {
+        if (urlError) {
+            history.replaceState(null, '', '/');
+            if (notice?.autoDismiss) {
+                setTimeout((): void => { notice = null; }, 8000);
+            }
+        }
+    })
 
     /** Eight individual hex characters for the setup code boxes. */
     let codeBoxes = $state<string[]>(['', '', '', '', '', '', '', '']);
@@ -248,6 +342,33 @@
             </p>
         </div>
 
+        {#if notice}
+            <div class="notice-enter mb-5 rounded-lg border {notice.bgClass} {notice.borderClass} px-3.5 py-3">
+                <div class="flex items-start gap-2.5">
+                    <div class="mt-0.5 shrink-0 {notice.iconClass}">
+                        {#if notice.icon === 'user-x'}
+                            <UserX size={15} />
+                        {:else if notice.icon === 'ban'}
+                            <Ban size={15} />
+                        {:else}
+                            <CircleAlert size={15} />
+                        {/if}
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-[13px] font-semibold leading-snug text-foreground">{notice.title}</p>
+                        <p class="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">{notice.description}</p>
+                    </div>
+                    <button
+                        onclick={() => (notice = null)}
+                        class="shrink-0 text-muted-foreground/30 transition-colors hover:text-foreground"
+                        aria-label="Dismiss"
+                    >
+                        <X size={13} />
+                    </button>
+                </div>
+            </div>
+        {/if}
+
         <form onsubmit={handleLogin} class="flex flex-col gap-4">
             {#if needsSetup}
                 <div class="flex flex-col gap-1.5">
@@ -426,6 +547,21 @@
 
     :global(.animate-shake) {
         animation: shake 0.5s ease-in-out;
+    }
+
+    .notice-enter {
+        animation: notice-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    @keyframes notice-in {
+        from {
+            opacity: 0;
+            transform: translateY(-6px) scale(0.98);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
     }
 
     .logo-transition {

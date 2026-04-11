@@ -23,7 +23,8 @@ import (
 // TODO: Add TOML config reader that scans the servers/ directory structure
 // and parses each server.toml into a typed Go struct. Needs a file watcher
 // or reload endpoint to pick up config changes without restart.
-func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *auth.CfxAuth, fe *auth.FieldEncryptor, discord *auth.DiscordAuth, st *auth.SetupTokenStore) {
+
+func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *auth.CfxAuth, fe *auth.FieldEncryptor, discord *auth.DiscordAuth, st *auth.SetupTokenStore, baseURL string) {
 	authHandler := NewAuthHandler(db, sm, cfx, fe, discord, st)
 	authGroup := r.Group("/auth")
 
@@ -45,6 +46,26 @@ func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *a
 	protected.Get("/me", authHandler.Me)
 	protected.Get("/sessions", authHandler.Sessions)
 	protected.Delete("/sessions/:id", authHandler.RevokeSession)
+
+	// Invite endpoints
+	inviteHandler := NewInviteHandler(db, sm, baseURL)
+	inviteGroup := r.Group("/invites")
+
+	inviteGroup.Get("/:token/validate", inviteHandler.Validate)
+	inviteGroup.Post("/:token/accept", inviteHandler.Accept)
+
+	inviteProtected := inviteGroup.Group("", auth.RequireAuth(sm, db))
+	inviteProtected.Post("", inviteHandler.Create)
+	inviteProtected.Get("", inviteHandler.List)
+	inviteProtected.Delete("/:id", inviteHandler.Revoke)
+
+	// User management endpoints (owner-only)
+	userHandler := NewUserHandler(db, sm)
+	userGroup := r.Group("/users", auth.RequireAuth(sm, db))
+	userGroup.Get("", userHandler.List)
+	userGroup.Post("/:id/suspend", userHandler.Suspend)
+	userGroup.Post("/:id/unsuspend", userHandler.Unsuspend)
+	userGroup.Delete("/:id", userHandler.Delete)
 
 	master := protected.Group("/master", auth.RequireMaster)
 	master.Post("/savediscord", authHandler.SaveDiscordAuthentication)

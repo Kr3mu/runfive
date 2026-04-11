@@ -4,7 +4,11 @@
 // (Discourse User API Keys), and Discord (planned).
 package models
 
-import "gorm.io/gorm"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 // User represents an authenticated user account.
 //
@@ -22,6 +26,8 @@ type User struct {
 	PasswordHash *string `gorm:"column:password_hash"`
 	// IsOwner is true for the first registered user (master account).
 	IsOwner bool `gorm:"not null;default:false"`
+	// SuspendedAt is set when the account is suspended; nil means active.
+	SuspendedAt *time.Time
 
 	// CfxID is the Discourse user ID from forum.cfx.re.
 	CfxID *int `gorm:"uniqueIndex"`

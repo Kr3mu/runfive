@@ -54,6 +54,11 @@ func RequireAuth(sm *SessionManager, db *gorm.DB) fiber.Handler {
 			return fiber.NewError(fiber.StatusInternalServerError, "database error")
 		}
 
+		if user.SuspendedAt != nil {
+			_ = sm.DestroySession(c, token)
+			return fiber.NewError(fiber.StatusUnauthorized, "account suspended")
+		}
+
 		c.Locals(localsUserKey, &user)
 		c.Locals(localsTokenKey, token)
 

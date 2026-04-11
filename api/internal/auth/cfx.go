@@ -48,6 +48,8 @@ type pendingAuth struct {
 	nonce string
 	// If set, the callback links the Cfx account to this existing user instead of creating/finding one
 	linkUserID *uint
+	// If set, the callback creates a new account using this invite token
+	inviteToken string
 	// Absolute expiry for this pending auth
 	expiresAt time.Time
 }
@@ -99,7 +101,8 @@ func NewCfxAuth(baseURL string) *CfxAuth {
 // StartAuth generates an RSA keypair, stores it in memory, and returns
 // the Discourse redirect URL the user should be sent to.
 // If linkUserID is non-nil, the callback will link the Cfx account to this user.
-func (ca *CfxAuth) StartAuth(linkUserID *uint) (string, error) {
+// If inviteToken is non-empty, the callback will create a new account via invite.
+func (ca *CfxAuth) StartAuth(linkUserID *uint, inviteToken string) (string, error) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, rsaKeyBits)
 	if err != nil {
 		return "", fmt.Errorf("generate rsa key: %w", err)
@@ -109,10 +112,11 @@ func (ca *CfxAuth) StartAuth(linkUserID *uint) (string, error) {
 	state := uuid.New().String()
 
 	ca.pending.Store(state, &pendingAuth{
-		privateKey: privateKey,
-		nonce:      nonce,
-		linkUserID: linkUserID,
-		expiresAt:  time.Now().Add(pendingAuthTTL),
+		privateKey:  privateKey,
+		nonce:       nonce,
+		linkUserID:  linkUserID,
+		inviteToken: inviteToken,
+		expiresAt:   time.Now().Add(pendingAuthTTL),
 	})
 
 	pubKeyPEM, err := marshalPublicKeyPEM(&privateKey.PublicKey)
@@ -136,42 +140,43 @@ func (ca *CfxAuth) StartAuth(linkUserID *uint) (string, error) {
 
 // HandleCallback processes the callback from forum.cfx.re, decrypts the
 // payload, verifies the nonce, and fetches user data.
-func (ca *CfxAuth) HandleCallback(state string, encryptedPayload string) (*CfxUserData, string, *uint, error) {
+// Returns: userData, apiKey, linkUserID, inviteToken, error.
+func (ca *CfxAuth) HandleCallback(state string, encryptedPayload string) (*CfxUserData, string, *uint, string, error) {
 	val, ok := ca.pending.LoadAndDelete(state)
 	if !ok {
-		return nil, "", nil, fmt.Errorf("unknown or expired auth state")
+		return nil, "", nil, "", fmt.Errorf("unknown or expired auth state")
 	}
 	pa := val.(*pendingAuth)
 
 	if time.Now().After(pa.expiresAt) {
-		return nil, "", nil, fmt.Errorf("auth attempt expired")
+		return nil, "", nil, "", fmt.Errorf("auth attempt expired")
 	}
 
 	ciphertext, err := base64.StdEncoding.DecodeString(encryptedPayload)
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("decode payload: %w", err)
+		return nil, "", nil, "", fmt.Errorf("decode payload: %w", err)
 	}
 
 	plaintext, err := rsa.DecryptPKCS1v15(rand.Reader, pa.privateKey, ciphertext) //nolint:staticcheck // Discourse User API Keys protocol requires PKCS1v15
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("decrypt payload: %w", err)
+		return nil, "", nil, "", fmt.Errorf("decrypt payload: %w", err)
 	}
 
 	var payload discoursePayload
 	if err := json.Unmarshal(plaintext, &payload); err != nil {
-		return nil, "", nil, fmt.Errorf("unmarshal payload: %w", err)
+		return nil, "", nil, "", fmt.Errorf("unmarshal payload: %w", err)
 	}
 
 	if payload.Nonce != pa.nonce {
-		return nil, "", nil, fmt.Errorf("nonce mismatch")
+		return nil, "", nil, "", fmt.Errorf("nonce mismatch")
 	}
 
 	userData, err := fetchCfxUser(payload.Key)
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("fetch user data: %w", err)
+		return nil, "", nil, "", fmt.Errorf("fetch user data: %w", err)
 	}
 
-	return userData, payload.Key, pa.linkUserID, nil
+	return userData, payload.Key, pa.linkUserID, pa.inviteToken, nil
 }
 
 // fetchCfxUser calls forum.cfx.re/session/current.json with the User API Key
