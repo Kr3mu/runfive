@@ -74,6 +74,14 @@ interface SetupStatus {
   needsSetup: boolean;
 }
 
+/** Discord OAuth credentials returned by GET /v1/auth/master/getdiscord. */
+export interface DiscordAuthentication {
+  /** Discord application client ID */
+  clientId: string;
+  /** Discord application client secret */
+  clientSecret: string;
+}
+
 /**
  * Fetches the current authenticated user or returns null if not logged in.
  *
@@ -109,6 +117,12 @@ export async function fetchSetupStatus(): Promise<SetupStatus> {
   const res: Response = await fetch('/v1/auth/setup-status');
   if (!res.ok) throw new Error(`GET /v1/auth/setup-status failed: ${res.status}`);
   return (await res.json()) as SetupStatus;
+}
+
+export async function fetchDiscordStatus(): Promise<boolean> {
+  const res: Response = await fetch('/v1/auth/discord-status');
+  if (!res.ok) throw new Error(`GET /v1/auth/discord-status failed: ${res.status}`);
+  return (await res.json())?.configured as boolean ?? false;
 }
 
 /**
@@ -158,6 +172,39 @@ export async function login(username: string, password: string): Promise<AuthUse
     throw new Error(body.error ?? `Login failed: ${res.status}`);
   }
   return (await res.json()) as AuthUser;
+}
+
+/**
+ * Saves Discord OAuth credentials. The backend validates them against
+ * the Discord API before persisting, so this will throw on invalid credentials.
+ *
+ * @param clientId - Discord application client ID
+ * @param clientSecret - Discord application client secret
+ * @throws Error if credentials are invalid or saving fails
+ */
+export async function SaveDiscordAuthentication(clientId: string, clientSecret: string): Promise<void> {
+  const res: Response = await fetch('/v1/auth/master/savediscord', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientId, clientSecret}),
+  });
+  if (!res.ok) {
+    const body: { error: string } = (await res.json()) as { error: string };
+    throw new Error(body.error ?? `Saving Failed: ${res.status}`);
+  }
+}
+
+/**
+ * Fetches the currently configured Discord OAuth credentials.
+ * Returns null if the user is not authenticated (401).
+ *
+ * @returns Discord credentials or null
+ */
+export async function GetDiscordAuthentication(): Promise<DiscordAuthentication | null> {
+  const res: Response = await fetch('/v1/auth/master/getdiscord');
+  if (res.status === 401) return null;
+  if (!res.ok) throw new Error(`GET /v1/auth/master/getdiscord failed: ${res.status}`);
+  return (await res.json()) as DiscordAuthentication;
 }
 
 /**

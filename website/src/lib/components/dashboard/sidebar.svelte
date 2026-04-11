@@ -21,14 +21,13 @@
     import Share2 from "@lucide/svelte/icons/share-2";
     import ClipboardCheck from "@lucide/svelte/icons/clipboard-check";
     import ServerSwitcher from "./server-switcher.svelte";
+    import GraduationCap from "@lucide/svelte/icons/graduation-cap";
     import { dashboardState } from "$lib/dashboard-state.svelte";
     import { widgetRegistry } from "$lib/widget-registry";
     import { encodeLayout } from "$lib/layout-codec";
-    import { logout, authQueryOptions } from "$lib/api/auth";
+    import { authQueryOptions, logout } from "$lib/api/auth";
     import { createQuery } from "@tanstack/svelte-query";
-
-    const authQuery = createQuery(() => authQueryOptions());
-    const isOwner = $derived(authQuery.data?.isOwner ?? false);
+    import { isActive } from "sv-router/generated";
 
     let isLoggingOut = $state(false);
 
@@ -75,7 +74,11 @@
         onaddwidget?: (id: string) => void;
     }
 
-    let { collapsed = $bindable(false), activeWidgets = [], onaddwidget }: Props = $props();
+    let {
+        collapsed = $bindable(false),
+        activeWidgets = [],
+        onaddwidget,
+    }: Props = $props();
 
     const availableWidgets = $derived(
         widgetRegistry.filter((w) => !activeWidgets.includes(w.id)),
@@ -90,20 +93,28 @@
     };
 
     const navItems = [
-        { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", active: true },
-        { icon: Users, label: "Players", href: "/dashboard/players", active: false },
-        { icon: Terminal, label: "Console", href: "/dashboard/console", active: false },
-        { icon: ShieldBan, label: "Bans", href: "/dashboard/bans", active: false },
-        { icon: Settings, label: "Settings", href: "/dashboard/settings", active: false },
+        { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
+        { icon: Users, label: "Players", href: "/dashboard/players" },
+        { icon: Terminal, label: "Console", href: "/dashboard/console" },
+        { icon: ShieldBan, label: "Bans", href: "/dashboard/bans" },
     ];
+
+    const authQuery = createQuery(() => authQueryOptions());
+  
+    const user = $derived(authQuery.data);
+    const isOwner = $derived(user?.isOwner ?? false);
 </script>
 
 <aside
     class="group/sidebar flex h-full flex-col bg-sidebar transition-all duration-300 ease-out
-        {collapsed ? 'w-[52px]' : 'w-[220px]'}"
+        {collapsed ? 'w-13' : 'w-55'}"
 >
     <!-- Logo Row -->
-    <div class="flex h-12 shrink-0 items-center {collapsed ? 'justify-center px-0' : 'justify-between px-4'}">
+    <div
+        class="flex h-12 shrink-0 items-center {collapsed
+            ? 'justify-center px-0'
+            : 'justify-between px-4'}"
+    >
         {#if !collapsed}
             <a href="/dashboard" class="flex items-center">
                 <Logo class="w-20" />
@@ -132,25 +143,37 @@
     <!-- Navigation -->
     <nav class="flex-1 overflow-y-auto {collapsed ? 'px-1.5' : 'px-2'} py-2">
         {#each navItems as item}
+            <!-- ignore type missmatch (as any) -->
+            {@const active = isActive(item.href as any)}
             <a
                 href={item.href}
                 data-view-transition
                 class="group flex items-center rounded-md transition-all duration-150
-                    {collapsed ? 'mb-1 justify-center p-2' : 'mb-0.5 gap-2.5 px-2.5 py-[7px]'}
-                    {item.active
-                        ? 'bg-primary/12 text-primary'
-                        : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'}"
+                    {collapsed
+                    ? 'mb-1 justify-center p-2'
+                    : 'mb-0.5 gap-2.5 px-2.5 py-1.75'}
+                    {active
+                    ? 'bg-primary/12 text-primary'
+                    : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'}"
                 title={collapsed ? item.label : undefined}
             >
                 <item.icon
                     size={collapsed ? 17 : 15}
-                    strokeWidth={item.active ? 2.2 : 1.8}
-                    class="shrink-0 {item.active ? 'text-primary' : 'text-muted-foreground/60 group-hover:text-foreground/70'}"
+                    strokeWidth={active ? 2.2 : 1.8}
+                    class="shrink-0 {active
+                        ? 'text-primary'
+                        : 'text-muted-foreground/60 group-hover:text-foreground/70'}"
                 />
                 {#if !collapsed}
-                    <span class="text-[12.5px] font-medium {item.active ? 'font-semibold' : ''}">{item.label}</span>
-                    {#if item.active}
-                        <div class="ml-auto h-1 w-1 rounded-full bg-primary"></div>
+                    <span
+                        class="text-[12.5px] font-medium {active
+                            ? 'font-semibold'
+                            : ''}">{item.label}</span
+                    >
+                    {#if active}
+                        <div
+                            class="ml-auto h-1 w-1 rounded-full bg-primary"
+                        ></div>
                     {/if}
                 {/if}
             </a>
@@ -161,21 +184,31 @@
     {#if dashboardState.editing && availableWidgets.length > 0 && !collapsed}
         <div class="shrink-0 px-2 pb-2">
             <div class="mx-0.5 mb-2 h-px bg-border/50"></div>
-            <p class="mb-1.5 px-2.5 text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase">
+            <p
+                class="mb-1.5 px-2.5 text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase"
+            >
                 Add Widget
             </p>
             {#each availableWidgets as widget}
                 <button
                     onclick={() => onaddwidget?.(widget.id)}
-                    class="group flex w-full items-center gap-2.5 rounded-md px-2.5 py-[7px] text-muted-foreground/50 transition-colors hover:bg-primary/8 hover:text-primary"
+                    class="group flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.75 text-muted-foreground/50 transition-colors hover:bg-primary/8 hover:text-primary"
                 >
                     {#if widgetIconMap[widget.icon]}
-                        {@const WidgetIcon = widgetIconMap[widget.icon]}<WidgetIcon size={15} strokeWidth={1.8} class="shrink-0" />
+                        {@const WidgetIcon =
+                            widgetIconMap[widget.icon]}<WidgetIcon
+                            size={15}
+                            strokeWidth={1.8}
+                            class="shrink-0"
+                        />
                     {:else}
                         <Plus size={15} strokeWidth={1.8} class="shrink-0" />
                     {/if}
                     <span class="text-[12.5px]">{widget.label}</span>
-                    <Plus size={12} class="ml-auto opacity-0 transition-opacity group-hover:opacity-100" />
+                    <Plus
+                        size={12}
+                        class="ml-auto opacity-0 transition-opacity group-hover:opacity-100"
+                    />
                 </button>
             {/each}
         </div>
@@ -236,69 +269,189 @@
         <button
             onclick={() => dashboardState.toggle()}
             class="mb-0.5 flex w-full items-center rounded-md transition-all
-                {collapsed ? 'justify-center p-2' : 'gap-2.5 px-2.5 py-[7px]'}
+                {collapsed ? 'justify-center p-2' : 'gap-2.5 px-2.5 py-1.75'}
                 {dashboardState.editing
-                    ? 'bg-primary/12 text-primary'
-                    : 'text-muted-foreground/40 hover:bg-muted/50 hover:text-muted-foreground'}"
-            title={collapsed ? (dashboardState.editing ? "Done editing" : "Edit Dashboard") : undefined}
+                ? 'bg-primary/12 text-primary'
+                : 'text-muted-foreground/40 hover:bg-muted/50 hover:text-muted-foreground'}"
+            title={collapsed
+                ? dashboardState.editing
+                    ? "Done editing"
+                    : "Edit Dashboard"
+                : undefined}
         >
             {#if dashboardState.editing}
-                <Check size={collapsed ? 17 : 15} strokeWidth={2.2} class="shrink-0" />
-                {#if !collapsed}<span class="text-[12.5px] font-semibold">Done Editing</span>{/if}
+                <Check
+                    size={collapsed ? 17 : 15}
+                    strokeWidth={2.2}
+                    class="shrink-0"
+                />
+                {#if !collapsed}<span class="text-[12.5px] font-semibold"
+                        >Done Editing</span
+                    >{/if}
             {:else}
-                <Pencil size={collapsed ? 17 : 15} strokeWidth={1.8} class="shrink-0" />
-                {#if !collapsed}<span class="text-[12.5px]">Edit Dashboard</span>{/if}
+                <Pencil
+                    size={collapsed ? 17 : 15}
+                    strokeWidth={1.8}
+                    class="shrink-0"
+                />
+                {#if !collapsed}<span class="text-[12.5px]">Edit Dashboard</span
+                    >{/if}
             {/if}
         </button>
         {#if dashboardState.editing}
             <button
                 onclick={shareDashboard}
                 class="mb-1 flex w-full items-center rounded-md transition-all
-                    {collapsed ? 'justify-center p-2' : 'gap-2.5 px-2.5 py-[7px]'}
+                    {collapsed
+                    ? 'justify-center p-2'
+                    : 'gap-2.5 px-2.5 py-1.75'}
                     {shareState === 'copied'
-                        ? 'text-emerald-500'
-                        : 'text-muted-foreground/40 hover:bg-muted/50 hover:text-muted-foreground'}"
+                    ? 'text-emerald-500'
+                    : 'text-muted-foreground/40 hover:bg-muted/50 hover:text-muted-foreground'}"
                 title={collapsed ? "Share layout" : undefined}
             >
                 {#if shareState === "copied"}
-                    <ClipboardCheck size={collapsed ? 17 : 15} strokeWidth={2.2} class="shrink-0" />
-                    {#if !collapsed}<span class="text-[12.5px] font-semibold">Copied!</span>{/if}
+                    <ClipboardCheck
+                        size={collapsed ? 17 : 15}
+                        strokeWidth={2.2}
+                        class="shrink-0"
+                    />
+                    {#if !collapsed}<span class="text-[12.5px] font-semibold"
+                            >Copied!</span
+                        >{/if}
                 {:else}
-                    <Share2 size={collapsed ? 17 : 15} strokeWidth={1.8} class="shrink-0" />
-                    {#if !collapsed}<span class="text-[12.5px]">Share Layout</span>{/if}
+                    <Share2
+                        size={collapsed ? 17 : 15}
+                        strokeWidth={1.8}
+                        class="shrink-0"
+                    />
+                    {#if !collapsed}<span class="text-[12.5px]"
+                            >Share Layout</span
+                        >{/if}
                 {/if}
             </button>
         {/if}
 
         <div class="mb-1 {collapsed ? '' : 'mx-0.5'} h-px bg-border/50"></div>
+        <!-- Master Actions -->
+        {#if isOwner}
+            <a
+                href="/dashboard/master"
+                data-view-transition
+                class="group flex items-center rounded-md transition-all duration-150
+                    {collapsed
+                    ? 'mb-1 justify-center p-2'
+                    : 'mb-0.5 gap-2.5 px-2.5 py-1.75'}                
+                    {isActive('/dashboard/master')
+                    ? 'bg-primary/12 text-primary'
+                    : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'}"
+                title={collapsed ? "Master Actions" : undefined}
+            >
+                <GraduationCap
+                    size={collapsed ? 17 : 15}
+                    strokeWidth={isActive("/dashboard/master") ? 2.2 : 1.8}
+                    class="shrink-0 {isActive('/dashboard/master')
+                        ? 'text-primary'
+                        : 'text-muted-foreground/60 group-hover:text-foreground/70'}"
+                />
+                {#if !collapsed}
+                    <span
+                        class="text-[12.5px] font-medium {isActive(
+                            '/dashboard/master',
+                        )
+                            ? 'font-semibold'
+                            : ''}">Master Actions</span
+                    >
+                    {#if isActive("/dashboard/master")}
+                        <div
+                            class="ml-auto h-1 w-1 rounded-full bg-primary"
+                        ></div>
+                    {/if}
+                {/if}
+            </a>
+        {/if}
+        <!-- Account Settings -->
+        <a
+            href="/dashboard/settings"
+            data-view-transition
+            class="group flex items-center rounded-md transition-all duration-150
+                {collapsed
+                ? 'mb-1 justify-center p-2'
+                : 'mb-0.5 gap-2.5 px-2.5 py-1.75'}                
+                {isActive('/dashboard/settings')
+                ? 'bg-primary/12 text-primary'
+                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'}"
+            title={collapsed ? "Account Settings" : undefined}
+        >
+            <Settings
+                size={collapsed ? 17 : 15}
+                strokeWidth={isActive("/dashboard/settings") ? 2.2 : 1.8}
+                class="shrink-0 {isActive('/dashboard/settings')
+                    ? 'text-primary'
+                    : 'text-muted-foreground/60 group-hover:text-foreground/70'}"
+            />
+            {#if !collapsed}
+                <span
+                    class="text-[12.5px] font-medium {isActive(
+                        '/dashboard/settings',
+                    )
+                        ? 'font-semibold'
+                        : ''}">Account Settings</span
+                >
+                {#if isActive("/dashboard/settings")}
+                    <div class="ml-auto h-1 w-1 rounded-full bg-primary"></div>
+                {/if}
+            {/if}
+        </a>
+
         <button
             onclick={theme.toggle}
             class="flex w-full items-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground
-                {collapsed ? 'justify-center p-2' : 'gap-2.5 px-2.5 py-[7px]'}"
+                {collapsed ? 'justify-center p-2' : 'gap-2.5 px-2.5 py-1.75'}"
             title={collapsed ? "Toggle theme" : undefined}
         >
             {#if theme.value === "dark"}
-                <Sun size={collapsed ? 17 : 15} strokeWidth={1.8} class="text-muted-foreground/60" />
-                {#if !collapsed}<span class="text-[12.5px]">Light Mode</span>{/if}
+                <Sun
+                    size={collapsed ? 17 : 15}
+                    strokeWidth={1.8}
+                    class="text-muted-foreground/60"
+                />
+                {#if !collapsed}<span class="text-[12.5px]">Light Mode</span
+                    >{/if}
             {:else}
-                <Moon size={collapsed ? 17 : 15} strokeWidth={1.8} class="text-muted-foreground/60" />
-                {#if !collapsed}<span class="text-[12.5px]">Dark Mode</span>{/if}
+                <Moon
+                    size={collapsed ? 17 : 15}
+                    strokeWidth={1.8}
+                    class="text-muted-foreground/60"
+                />
+                {#if !collapsed}<span class="text-[12.5px]">Dark Mode</span
+                    >{/if}
             {/if}
         </button>
         <button
             onclick={handleLogout}
             disabled={isLoggingOut}
             class="flex w-full items-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50
-                {collapsed ? 'justify-center p-2' : 'gap-2.5 px-2.5 py-[7px]'}"
+                {collapsed ? 'justify-center p-2' : 'gap-2.5 px-2.5 py-1.75'}"
             title={collapsed ? "Sign out" : undefined}
         >
-            <LogOut size={collapsed ? 17 : 15} strokeWidth={1.8} class="text-muted-foreground/60" />
-            {#if !collapsed}<span class="text-[12.5px]">{isLoggingOut ? 'Signing out...' : 'Sign Out'}</span>{/if}
+            <LogOut
+                size={collapsed ? 17 : 15}
+                strokeWidth={1.8}
+                class="text-muted-foreground/60"
+            />
+            {#if !collapsed}<span class="text-[12.5px]"
+                    >{isLoggingOut ? "Signing out..." : "Sign Out"}</span
+                >{/if}
         </button>
 
         <!-- Mini footer links -->
         <div class="mt-1 {collapsed ? '' : 'mx-0.5'} h-px bg-border/30"></div>
-        <div class="mt-1.5 flex items-center {collapsed ? 'flex-col gap-1.5' : 'justify-center gap-3'}">
+        <div
+            class="mt-1.5 flex items-center {collapsed
+                ? 'flex-col gap-1.5'
+                : 'justify-center gap-3'}"
+        >
             <a
                 href="https://github.com/Kr3mu/runfive"
                 target="_blank"

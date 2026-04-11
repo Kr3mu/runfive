@@ -1,6 +1,4 @@
-// Package main is the application entry point. It loads configuration,
-// connects to the database, initializes the session manager and auth
-// providers, and starts the HTTP server.
+// Package main is the application entry point.
 package main
 
 import (
@@ -16,6 +14,7 @@ import (
 	"github.com/Kr3mu/runfive/internal/database"
 	"github.com/Kr3mu/runfive/internal/models"
 	"github.com/gofiber/fiber/v3"
+	"github.com/joho/godotenv"
 )
 
 var appConfig = fiber.Config{
@@ -41,6 +40,7 @@ var listenPort = flag.String("port", "", "HTTP listen port (overrides PORT env)"
 
 func main() {
 	flag.Parse()
+	godotenv.Load(".env")
 
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -67,6 +67,7 @@ func main() {
 	}
 
 	cfx := auth.NewCfxAuth(cfg.BaseURL)
+	discord := auth.NewDiscordAuth(cfg.BaseURL, cfg.DiscordClientID, cfg.DiscordClientSecret)
 
 	setupTokenStore := auth.NewSetupTokenStore()
 	var userCount int64
@@ -84,12 +85,13 @@ func main() {
 	}
 
 	app := api.New(appConfig, api.AppDeps{
-		DB:      db,
-		SM:      sm,
-		Cfx:     cfx,
-		FE:      fe,
-		ST:      setupTokenStore,
-		BaseURL: cfg.BaseURL,
+		DB:  db,
+		SM:  sm,
+		Cfx: cfx,
+		FE:  fe,
+    Discord: discord,
+		ST:  setupTokenStore,
+    BaseURL: cfg.BaseURL,
 	})
 
 	if setupURL != "" {

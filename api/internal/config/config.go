@@ -8,25 +8,12 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 )
 
 // Config holds all runtime configuration for the application.
-//
-// TODO: Add ServersDir field (path to the servers/ directory). On startup,
-// scan this directory for subdirectories containing server.toml files.
-// Each TOML defines a managed FiveM server instance (name, port, paths,
-// resource config, etc.). Needs a typed ServerConfig struct for the TOML
-// schema and a loader that returns []ServerConfig keyed by directory name.
-//
-// TODO: Add ArtifactsDir field for the shared cfx.re server-binary pool.
-// Artifacts (cfx binaries) are shared across all managed servers — one
-// download, many servers reference it via an `artifact_version` field in
-// their server.toml. Needs integration with Kr3mu's existing artifact
-// scraper: expose a management endpoint to list/download/select available
-// artifact versions. Note: resources (scripts) are per-server and live
-// inside each servers/<name>/ dir — artifacts are the only shared asset.
 type Config struct {
 	// HTTP listen port
 	Port string
@@ -36,6 +23,12 @@ type Config struct {
 	CfxAPIKeySecret [32]byte
 	// BaseURL is the public base URL used for OAuth redirect URIs (e.g. "http://localhost:5000").
 	BaseURL string
+	// DiscordClientID is the Discord application client ID for OAuth2.
+	// Optional at startup — can be configured later via the master panel.
+	DiscordClientID string
+	// DiscordClientSecret is the Discord application client secret for OAuth2.
+	// Optional at startup — can be configured later via the master panel.
+	DiscordClientSecret string
 }
 
 // LoadConfig reads configuration from environment variables.
@@ -44,9 +37,13 @@ type Config struct {
 // keys are generated and persisted to ".runfive-keys" beside the binary.
 func LoadConfig() (*Config, error) {
 	cfg := &Config{
-		Port:    envOrDefault("PORT", "5000"),
-		BaseURL: envOrDefault("BASE_URL", "http://localhost:5000"),
+		Port:                envOrDefault("PORT", "5000"),
+		BaseURL:             envOrDefault("BASE_URL", "http://localhost:5000"),
+		DiscordClientID:     envOrDefault("DISCORD_CLIENT_ID", ""),
+		DiscordClientSecret: envOrDefault("DISCORD_CLIENT_SECRET", ""),
 	}
+
+	log.Print(cfg.DiscordClientID, cfg.DiscordClientSecret)
 
 	sessionKey, err := loadOrGenerateKey("SESSION_ENCRYPT_KEY", "session_encrypt_key")
 	if err != nil {

@@ -85,7 +85,8 @@
 
     const statusDot: Record<ServerStatus, string> = {
         online: "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.55)]",
-        starting: "bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.55)] animate-pulse",
+        starting:
+            "bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.55)] animate-pulse",
         stopped: "bg-muted-foreground/30",
         crashed: "bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.55)]",
     };
@@ -136,20 +137,30 @@
         class="group w-full rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted/40"
     >
         <div class="flex items-center gap-2">
-            <div class="h-2 w-2 shrink-0 rounded-full {statusDot[server.status]}"></div>
-            <span class="flex-1 truncate font-heading text-[11px] font-semibold text-foreground/90">
+            <div
+                class="h-2 w-2 shrink-0 rounded-full {statusDot[server.status]}"
+            ></div>
+            <span
+                class="flex-1 truncate font-heading text-[11px] font-semibold text-foreground/90"
+            >
                 {server.name}
             </span>
             <span class="shrink-0 font-mono text-[10px] tabular-nums">
-                <span class="font-medium text-foreground/70">{server.playerCount}</span><span class="text-muted-foreground/40">/{server.maxPlayers}</span>
+                <span class="font-medium text-foreground/70"
+                    >{server.playerCount}</span
+                ><span class="text-muted-foreground/40"
+                    >/{server.maxPlayers}</span
+                >
             </span>
         </div>
-        <div class="mt-0.5 flex items-center gap-1.5 pl-[16px]">
+        <div class="mt-0.5 flex items-center gap-1.5 pl-4">
             <span class="text-[9px] font-medium {statusText[server.status]}">
                 {statusLabel[server.status]}
             </span>
             <span class="text-[8px] text-muted-foreground/25">•</span>
-            <span class="truncate font-mono text-[9px] text-muted-foreground/40">
+            <span
+                class="truncate font-mono text-[9px] text-muted-foreground/40"
+            >
                 {server.address}
             </span>
         </div>
@@ -158,39 +169,59 @@
 
 {#snippet triggerCard()}
     {#if !selected}
-        <div class="animate-pulse rounded-lg border border-border/50 bg-background/50 p-3">
+        <div
+            class="animate-pulse rounded-lg border border-border/50 bg-background/50 p-3"
+        >
             <div class="flex items-center gap-2">
                 <div class="h-2 w-2 rounded-full bg-muted-foreground/20"></div>
                 <div class="h-3 w-24 rounded bg-muted-foreground/10"></div>
             </div>
-            <div class="mt-3 h-1 w-full rounded-full bg-muted-foreground/10"></div>
+            <div
+                class="mt-3 h-1 w-full rounded-full bg-muted-foreground/10"
+            ></div>
         </div>
     {:else}
         <div
             class="rounded-lg border bg-background/50 p-3 transition-all duration-200
                 {inlineOpen
-                    ? 'border-primary/40 bg-background/80 shadow-sm'
-                    : 'border-border/50 hover:border-primary/30 hover:bg-background/80 hover:shadow-sm'}"
+                ? 'border-primary/40 bg-background/80 shadow-sm'
+                : 'border-border/50 hover:border-primary/30 hover:bg-background/80 hover:shadow-sm'}"
         >
             <div class="mb-2 flex items-center justify-between">
                 <div class="flex min-w-0 items-center gap-2">
-                    <div class="h-2 w-2 shrink-0 rounded-full {statusDot[selected.status]}"></div>
-                    <span class="truncate font-heading text-[12px] font-semibold text-foreground">{selected.name}</span>
+                    <div
+                        class="h-2 w-2 shrink-0 rounded-full {statusDot[
+                            selected.status
+                        ]}"
+                    ></div>
+                    <span
+                        class="truncate font-heading text-[12px] font-semibold text-foreground"
+                        >{selected.name}</span
+                    >
                 </div>
                 <ChevronsUpDown
                     size={11}
-                    class="shrink-0 transition-colors {inlineOpen ? 'text-primary/70' : 'text-muted-foreground/40'}"
+                    class="shrink-0 transition-colors {inlineOpen
+                        ? 'text-primary/70'
+                        : 'text-muted-foreground/40'}"
                 />
             </div>
 
             <div class="mb-2.5">
                 <div class="mb-1 flex items-baseline justify-between">
-                    <span class="text-[10px] text-muted-foreground">Players</span>
-                    <span class="font-mono text-[10px] font-semibold tabular-nums text-foreground">
-                        <span class="text-primary">{selected.playerCount}</span><span class="text-muted-foreground">/{selected.maxPlayers}</span>
+                    <span class="text-[10px] text-muted-foreground"
+                        >Players</span
+                    >
+                    <span
+                        class="font-mono text-[10px] font-semibold tabular-nums text-foreground"
+                    >
+                        <span class="text-primary">{selected.playerCount}</span
+                        ><span class="text-muted-foreground"
+                            >/{selected.maxPlayers}</span
+                        >
                     </span>
                 </div>
-                <div class="h-[5px] overflow-hidden rounded-full bg-muted">
+                <div class="h-1.25 overflow-hidden rounded-full bg-muted">
                     <div
                         class="h-full rounded-full bg-primary transition-all duration-500"
                         style="width: {playerPercent(selected)}%"
@@ -201,15 +232,24 @@
             <div class="flex justify-between">
                 <div class="flex items-center gap-1">
                     <Cpu size={10} class="text-muted-foreground/50" />
-                    <span class="font-mono text-[9px] font-medium tabular-nums text-emerald-400">{selected.cpu}%</span>
+                    <span
+                        class="font-mono text-[9px] font-medium tabular-nums text-emerald-400"
+                        >{selected.cpu}%</span
+                    >
                 </div>
                 <div class="flex items-center gap-1">
                     <HardDrive size={10} class="text-muted-foreground/50" />
-                    <span class="font-mono text-[9px] font-medium tabular-nums text-blue-400">{ramLabel(selected.ramMB)}</span>
+                    <span
+                        class="font-mono text-[9px] font-medium tabular-nums text-blue-400"
+                        >{ramLabel(selected.ramMB)}</span
+                    >
                 </div>
                 <div class="flex items-center gap-1">
                     <Activity size={10} class="text-muted-foreground/50" />
-                    <span class="font-mono text-[9px] font-medium tabular-nums text-primary">{tickLabel(selected.tickMs)}</span>
+                    <span
+                        class="font-mono text-[9px] font-medium tabular-nums text-primary"
+                        >{tickLabel(selected.tickMs)}</span
+                    >
                 </div>
             </div>
         </div>
@@ -225,10 +265,19 @@
         >
             <div class="flex flex-col items-center gap-2 py-1">
                 {#if selected}
-                    <div class="h-2 w-2 rounded-full {statusDot[selected.status]}"></div>
-                    <span class="font-mono text-[9px] font-bold tabular-nums text-primary">{selected.playerCount}</span>
+                    <div
+                        class="h-2 w-2 rounded-full {statusDot[
+                            selected.status
+                        ]}"
+                    ></div>
+                    <span
+                        class="font-mono text-[9px] font-bold tabular-nums text-primary"
+                        >{selected.playerCount}</span
+                    >
                 {:else}
-                    <div class="h-2 w-2 rounded-full bg-muted-foreground/30"></div>
+                    <div
+                        class="h-2 w-2 rounded-full bg-muted-foreground/30"
+                    ></div>
                 {/if}
             </div>
         </Popover.Trigger>
@@ -237,18 +286,23 @@
             side="right"
             align="start"
             sideOffset={8}
-            class="z-50 w-[296px] rounded-xl border border-border/60 bg-popover/95 p-1.5 shadow-2xl shadow-black/30 ring-1 ring-foreground/5 outline-none backdrop-blur-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-[side=right]:slide-in-from-left-1"
+            class="z-50 w-74 rounded-xl border border-border/60 bg-popover/95 p-1.5 shadow-2xl shadow-black/30 ring-1 ring-foreground/5 outline-none backdrop-blur-md data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-[side=right]:slide-in-from-left-1"
         >
             <div class="flex items-center justify-between px-2 pt-1.5 pb-2">
-                <span class="text-[9px] font-semibold tracking-[0.14em] text-muted-foreground/40 uppercase">
+                <span
+                    class="text-[9px] font-semibold tracking-[0.14em] text-muted-foreground/40 uppercase"
+                >
                     Your Servers
                 </span>
-                <span class="font-mono text-[10px] tabular-nums text-muted-foreground/30">{list.length}</span>
+                <span
+                    class="font-mono text-[10px] tabular-nums text-muted-foreground/30"
+                    >{list.length}</span
+                >
             </div>
 
             <div class="mx-1 mb-1 h-px bg-border/40"></div>
 
-            <div class="flex max-h-[320px] flex-col gap-0.5 overflow-y-auto px-1">
+            <div class="flex max-h-80 flex-col gap-0.5 overflow-y-auto px-1">
                 {#each list as server (server.id)}
                     {@const isActive = selected?.id === server.id}
                     <button
@@ -257,39 +311,72 @@
                             {isActive ? 'bg-primary/8' : 'hover:bg-muted/40'}"
                     >
                         {#if isActive}
-                            <span class="absolute top-1/2 left-0 h-5 w-[2px] -translate-y-1/2 rounded-r-full bg-primary"></span>
+                            <span
+                                class="absolute top-1/2 left-0 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-primary"
+                            ></span>
                         {/if}
 
                         <div class="flex items-center gap-2.5">
-                            <div class="h-2 w-2 shrink-0 rounded-full {statusDot[server.status]}"></div>
+                            <div
+                                class="h-2 w-2 shrink-0 rounded-full {statusDot[
+                                    server.status
+                                ]}"
+                            ></div>
                             <span
                                 class="flex-1 truncate font-heading text-[12.5px] font-semibold
-                                    {isActive ? 'text-foreground' : 'text-foreground/90'}"
+                                    {isActive
+                                    ? 'text-foreground'
+                                    : 'text-foreground/90'}"
                             >
                                 {server.name}
                             </span>
-                            <span class="shrink-0 font-mono text-[10.5px] tabular-nums">
-                                <span class={isActive ? 'font-semibold text-primary' : 'font-medium text-foreground/70'}>
+                            <span
+                                class="shrink-0 font-mono text-[10.5px] tabular-nums"
+                            >
+                                <span
+                                    class={isActive
+                                        ? "font-semibold text-primary"
+                                        : "font-medium text-foreground/70"}
+                                >
                                     {server.playerCount}
-                                </span><span class="text-muted-foreground/40">/{server.maxPlayers}</span>
+                                </span><span class="text-muted-foreground/40"
+                                    >/{server.maxPlayers}</span
+                                >
                             </span>
-                            <div class="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                            <div
+                                class="flex h-3.5 w-3.5 shrink-0 items-center justify-center"
+                            >
                                 {#if isActive}
-                                    <Check size={12} class="text-primary" strokeWidth={2.5} />
+                                    <Check
+                                        size={12}
+                                        class="text-primary"
+                                        strokeWidth={2.5}
+                                    />
                                 {/if}
                             </div>
                         </div>
 
-                        <div class="mt-1 flex items-center gap-1.5 pl-[18px]">
-                            <span class="text-[9.5px] font-medium {statusText[server.status]}">{statusLabel[server.status]}</span>
-                            <span class="text-[9px] text-muted-foreground/25">•</span>
-                            <span class="truncate font-mono text-[9.5px] text-muted-foreground/40">{server.address}</span>
+                        <div class="mt-1 flex items-center gap-1.5 pl-4.5">
+                            <span
+                                class="text-[9.5px] font-medium {statusText[
+                                    server.status
+                                ]}">{statusLabel[server.status]}</span
+                            >
+                            <span class="text-[9px] text-muted-foreground/25"
+                                >•</span
+                            >
+                            <span
+                                class="truncate font-mono text-[9.5px] text-muted-foreground/40"
+                                >{server.address}</span
+                            >
                         </div>
                     </button>
                 {/each}
 
                 {#if list.length === 0 && !servers.isPending}
-                    <div class="px-3 py-8 text-center text-[11px] text-muted-foreground/40">
+                    <div
+                        class="px-3 py-8 text-center text-[11px] text-muted-foreground/40"
+                    >
                         No servers configured
                     </div>
                 {/if}
@@ -355,7 +442,10 @@
                 class="pt-2"
             >
                 <div class="relative mb-1.5">
-                    <Search size={11} class="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-muted-foreground/40" />
+                    <Search
+                        size={11}
+                        class="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-muted-foreground/40"
+                    />
                     <input
                         bind:value={searchQuery}
                         type="text"
@@ -373,13 +463,15 @@
                     {/if}
                 </div>
 
-                <div class="flex max-h-[240px] flex-col gap-0.5 overflow-y-auto">
+                <div class="flex max-h-60 flex-col gap-0.5 overflow-y-auto">
                     {#each filteredOthers() as server (server.id)}
                         {@render serverRow(server)}
                     {/each}
 
                     {#if filteredOthers().length === 0}
-                        <div class="px-3 py-4 text-center text-[10px] text-muted-foreground/40">
+                        <div
+                            class="px-3 py-4 text-center text-[10px] text-muted-foreground/40"
+                        >
                             No matches
                         </div>
                     {/if}

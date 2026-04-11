@@ -44,4 +44,6 @@ type User struct {
 	DiscordUsername *string
 	// DiscordAvatar is the Discord avatar hash.
 	DiscordAvatar *string
+	// DiscordAccessToken is the AES-256-GCM encrypted OAuth2 access token.
+	DiscordAccessToken []byte `gorm:"column:discord_access_token"`
 }
