@@ -5,3 +5,4 @@ internal/spa/dist/*
 *.exe
 .runfive-keys
 database.db
+.env

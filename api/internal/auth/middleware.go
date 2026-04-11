@@ -63,6 +63,23 @@ func RequireAuth(sm *SessionManager, db *gorm.DB) fiber.Handler {
 	}
 }
 
+// RequireMaster is Fiber middleware that restricts access to the owner (master)
+// account. Must be chained after RequireAuth so that c.Locals("user") is set.
+// Returns 403 for any non-owner user.
+func RequireMaster(c fiber.Ctx) error {
+	user, ok := c.Locals(localsUserKey).(*models.User)
+
+	if !ok {
+		return fiber.NewError(fiber.StatusForbidden, "Not a master")
+	}
+
+	if user.IsOwner {
+		return c.Next()
+	}
+
+	return fiber.NewError(fiber.StatusForbidden, "Not a master")
+}
+
 // OptionalAuth returns Fiber middleware that loads the session if present
 // but does not require it. Downstream handlers can check GetUser(c).
 func OptionalAuth(sm *SessionManager, db *gorm.DB) fiber.Handler {

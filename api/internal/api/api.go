@@ -1,12 +1,9 @@
 // Package api provides HTTP application setup and route registration.
-//
-// Configures Fiber middleware, mounts versioned API routes with
-// authentication, and registers the SPA fallback handler.
 package api
 
 import (
-	"github.com/Kr3mu/runfive/internal/auth"
 	v1 "github.com/Kr3mu/runfive/internal/api/v1"
+	"github.com/Kr3mu/runfive/internal/auth"
 	"github.com/Kr3mu/runfive/internal/spa"
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/helmet"
@@ -22,6 +19,8 @@ type AppDeps struct {
 	SM *auth.SessionManager
 	// Cfx handles Cfx.re authentication.
 	Cfx *auth.CfxAuth
+  // Discord handles Discord authentication.
+  Discord *auth.DiscordAuth
 	// FE encrypts sensitive database fields.
 	FE *auth.FieldEncryptor
 	// ST holds the ephemeral setup token gating the initial /register call.
@@ -55,5 +54,5 @@ func New(appConfig fiber.Config, deps AppDeps) *fiber.App {
 
 func setupRoutes(app *fiber.App, deps AppDeps) {
 	v1Group := app.Group("/v1")
-	v1.RegisterRouter(v1Group, deps.DB, deps.SM, deps.Cfx, deps.FE, deps.ST)
+	v1.RegisterRouter(v1Group, deps.DB, deps.SM, deps.Cfx, deps.FE, deps.Discord, deps.ST)
 }

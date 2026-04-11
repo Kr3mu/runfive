@@ -1,10 +1,11 @@
 <script lang="ts">
-    import type { Snippet } from 'svelte';
-    import { createQuery } from '@tanstack/svelte-query';
-    import { authQueryOptions } from '$lib/api/auth';
-    import Logo from '$lib/components/logo.svelte';
-    import Github from '$lib/components/icons/github.svelte';
-    import Discord from '$lib/components/icons/discord.svelte';
+    import type { Snippet } from "svelte";
+    import { createQuery } from "@tanstack/svelte-query";
+    import { authQueryOptions } from "$lib/api/auth";
+    import Logo from "$lib/components/logo.svelte";
+    import Github from "$lib/components/icons/github.svelte";
+    import Discord from "$lib/components/icons/discord.svelte";
+    import { Toaster } from "$lib/components/ui/sonner";
 
     interface Props {
         /** Page content rendered by the router */
@@ -19,24 +20,26 @@
         const update = (): void => {
             pathname = window.location.pathname;
         };
-        window.addEventListener('popstate', update);
+        window.addEventListener("popstate", update);
         const observer = new MutationObserver(update);
         observer.observe(
-            document.querySelector('head title') ?? document.head,
+            document.querySelector("head title") ?? document.head,
             { childList: true, subtree: true, characterData: true },
         );
         return (): void => {
-            window.removeEventListener('popstate', update);
+            window.removeEventListener("popstate", update);
             observer.disconnect();
         };
     });
 
-    const isDashboard = $derived(pathname.startsWith('/dashboard'));
-    const isLoginPage = $derived(pathname === '/' || pathname === '');
+    const isDashboard = $derived(pathname.startsWith("/dashboard"));
+    const isLoginPage = $derived(pathname === "/" || pathname === "");
 
     const authQuery = createQuery(() => authQueryOptions());
 
-    const isAuthenticated = $derived(authQuery.data !== undefined && authQuery.data !== null);
+    const isAuthenticated = $derived(
+        authQuery.data !== undefined && authQuery.data !== null,
+    );
     const isAuthLoading = $derived(authQuery.isLoading);
 
     // TODO: Once RBAC is implemented, add per-server permission checks to
@@ -47,14 +50,15 @@
     $effect((): void => {
         if (isAuthLoading) return;
         if (isDashboard && !isAuthenticated) {
-            window.location.href = '/';
+            window.location.href = "/";
         }
         if (isLoginPage && isAuthenticated) {
-            window.location.href = '/dashboard';
+            window.location.href = "/dashboard";
         }
     });
 </script>
 
+<Toaster />
 {#if isAuthLoading}
     <div class="flex min-h-svh items-center justify-center bg-background">
         <Logo class="w-24 animate-pulse opacity-50" />

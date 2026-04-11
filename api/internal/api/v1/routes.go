@@ -1,6 +1,4 @@
 // Package v1 provides V1 API route registration.
-//
-// Mounts auth endpoints (public and protected) under /v1/auth.
 package v1
 
 import (
@@ -25,11 +23,12 @@ import (
 // TODO: Add TOML config reader that scans the servers/ directory structure
 // and parses each server.toml into a typed Go struct. Needs a file watcher
 // or reload endpoint to pick up config changes without restart.
-func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *auth.CfxAuth, fe *auth.FieldEncryptor, st *auth.SetupTokenStore) {
-	authHandler := NewAuthHandler(db, sm, cfx, fe, st)
+func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *auth.CfxAuth, fe *auth.FieldEncryptor, discord *auth.DiscordAuth, st *auth.SetupTokenStore) {
+	authHandler := NewAuthHandler(db, sm, cfx, fe, discord, st)
 	authGroup := r.Group("/auth")
 
 	authGroup.Get("/setup-status", authHandler.SetupStatus)
+	authGroup.Get("/discord-status", authHandler.DiscordStatus)
 	authGroup.Post("/register", authHandler.Register)
 	authGroup.Post("/login", authHandler.Login)
 
@@ -37,9 +36,17 @@ func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *a
 	cfxGroup.Get("", authHandler.CfxRedirect)
 	cfxGroup.Get("/callback", authHandler.CfxCallback)
 
+	discordGroup := authGroup.Group("/discord", auth.OptionalAuth(sm, db))
+	discordGroup.Get("", authHandler.DiscordRedirect)
+	discordGroup.Get("/callback", authHandler.DiscordCallback)
+
 	protected := authGroup.Group("", auth.RequireAuth(sm, db))
 	protected.Post("/logout", authHandler.Logout)
 	protected.Get("/me", authHandler.Me)
 	protected.Get("/sessions", authHandler.Sessions)
 	protected.Delete("/sessions/:id", authHandler.RevokeSession)
+
+	master := protected.Group("/master", auth.RequireMaster)
+	master.Post("/savediscord", authHandler.SaveDiscordAuthentication)
+	master.Get("/getdiscord", authHandler.GetDiscordAuthentication)
 }
