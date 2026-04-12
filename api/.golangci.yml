@@ -4,29 +4,52 @@ run:
   timeout: 5m
 
 linters:
+  default: standard
   enable:
-    - errcheck
-    - govet
-    - staticcheck
-    - unused
-    - ineffassign
-    - gocritic
-    - revive
     - gosec
+    - bodyclose
+    - nilerr
+    - errname
+    - revive
+    - misspell
     - unconvert
     - unparam
-    - misspell
     - prealloc
-    - nilerr
+    - gocritic
     - errorlint
-    - bodyclose
     - noctx
+    - exhaustive
 
-linters-settings:
-  revive:
-    rules:
-      - name: exported
-        disabled: true
-  gocritic:
-    disabled-checks:
-      - commentFormatting
+  settings:
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+        - name: unused-parameter
+          severity: warning
+    gosec:
+      excludes:
+        - G104
+    gocritic:
+      disabled-checks:
+        - commentFormatting
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    gofumpt:
+      module-path: github.com/Kr3mu/runfive
+      extra-rules: true
+    goimports:
+      local-prefixes:
+        - github.com/Kr3mu/runfive
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
