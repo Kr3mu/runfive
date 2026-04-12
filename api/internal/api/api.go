@@ -19,8 +19,8 @@ type AppDeps struct {
 	SM *auth.SessionManager
 	// Cfx handles Cfx.re authentication.
 	Cfx *auth.CfxAuth
-  // Discord handles Discord authentication.
-  Discord *auth.DiscordAuth
+    // Discord handles Discord authentication.
+    Discord *auth.DiscordAuth
 	// FE encrypts sensitive database fields.
 	FE *auth.FieldEncryptor
 	// ST holds the ephemeral setup token gating the initial /register call.
