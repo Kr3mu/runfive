@@ -5,11 +5,7 @@
     import CircleAlert from "@lucide/svelte/icons/circle-alert";
     import X from "@lucide/svelte/icons/x";
 
-    interface Props {
-        children: Snippet;
-    }
-
-    let { children }: Props = $props();
+    let { children }: { children: Snippet } = $props();
     let sidebarCollapsed = $state(false);
 
     const dashboardErrors: Record<string, string> = {

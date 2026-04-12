@@ -2,14 +2,22 @@
 package v1
 
 import (
+	"github.com/Kr3mu/runfive/internal/artifacts"
 	"github.com/Kr3mu/runfive/internal/auth"
 	"github.com/Kr3mu/runfive/internal/permissions"
+	"github.com/Kr3mu/runfive/internal/serverfs"
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
 )
 
 // RegisterRouter mounts all v1 API routes on the provided router group.
-func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *auth.CfxAuth, fe *auth.FieldEncryptor, discord *auth.DiscordAuth, st *auth.SetupTokenStore, baseURL string) {
+func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *auth.CfxAuth, fe *auth.FieldEncryptor, discord *auth.DiscordAuth, st *auth.SetupTokenStore, baseURL string, artifactsDir string) {
+	artifactManager, err := artifacts.NewManager(artifactsDir)
+	if err != nil {
+		panic(err)
+	}
+	serverRegistry := serverfs.NewRegistry("./servers", artifactManager)
+
 	authHandler := NewAuthHandler(db, sm, cfx, fe, discord, st)
 	authGroup := r.Group("/auth")
 
@@ -77,6 +85,17 @@ func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *a
 	roleGroup.Get("/:id", auth.RequireGlobalPerm(permissions.GlobalRoles, permissions.ActionRead), roleHandler.Get)
 	roleGroup.Put("/:id", auth.RequireGlobalPerm(permissions.GlobalRoles, permissions.ActionUpdate), roleHandler.Update)
 	roleGroup.Delete("/:id", auth.RequireGlobalPerm(permissions.GlobalRoles, permissions.ActionDelete), roleHandler.Delete)
+
+	serverHandler := NewServerHandler(serverRegistry, artifactManager)
+	serverGroup := authed.Group("/servers")
+	serverGroup.Get("", serverHandler.List)
+	serverGroup.Post("", auth.RequireGlobalPerm(permissions.GlobalServers, permissions.ActionCreate), serverHandler.Create)
+
+	artifactHandler := NewArtifactHandler(artifactManager, serverRegistry)
+	artifactGroup := authed.Group("/artifacts")
+	artifactGroup.Get("", auth.RequireGlobalPerm(permissions.GlobalServers, permissions.ActionCreate), artifactHandler.List)
+	artifactGroup.Post("/download", auth.RequireGlobalPerm(permissions.GlobalServers, permissions.ActionCreate), artifactHandler.Download)
+	artifactGroup.Delete("/:version", auth.RequireGlobalPerm(permissions.GlobalServers, permissions.ActionDelete), artifactHandler.Delete)
 
 	// Permission schema endpoint (any authenticated user)
 	authed.Get("/permissions/schema", PermissionSchema)
