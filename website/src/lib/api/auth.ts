@@ -40,9 +40,28 @@ interface ProviderInfo {
   discord: DiscordInfo | null;
 }
 
+/** Role display metadata returned in permission responses. */
+export interface RoleInfo {
+  /** Role database ID */
+  id: number;
+  /** Role display name */
+  name: string;
+  /** Hex color for UI badges */
+  color: string;
+}
+
+/** Permission map: resource -> action -> granted. */
+type PermissionMap = Record<string, Record<string, boolean>>;
+
+/** Per-server permission entry in the /me response. */
+interface ServerPermissionEntry {
+  /** Role metadata for this server assignment */
+  role: RoleInfo;
+  /** Resolved server-scoped permission map */
+  permissions: PermissionMap;
+}
+
 /** Authenticated user profile returned by GET /v1/auth/me. */
-// TODO: Add serverRoles field (Record<serverId, Role>) once RBAC lands.
-// Server IDs come from the TOML directory names, not the DB.
 export interface AuthUser {
   /** User database ID */
   id: number;
@@ -52,6 +71,12 @@ export interface AuthUser {
   isOwner: boolean;
   /** Linked authentication providers */
   providers: ProviderInfo;
+  /** Panel-wide role, null if none assigned */
+  globalRole: RoleInfo | null;
+  /** Resolved panel-wide permission map */
+  globalPermissions: PermissionMap;
+  /** Per-server role assignments and permissions, keyed by server ID */
+  serverPermissions: Record<string, ServerPermissionEntry>;
 }
 
 /** Single active session entry returned by GET /v1/auth/sessions. */
