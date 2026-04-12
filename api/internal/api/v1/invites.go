@@ -63,13 +63,14 @@ func (h *InviteHandler) lookupPendingInvite(rawToken string) (*models.Invite, er
 	return &invite, nil
 }
 
-// Create generates a new invite token. Owner-only.
+// Create generates a new invite token.
+// Requires global "users.create" permission (enforced by middleware).
 //
 // POST /v1/invites
 func (h *InviteHandler) Create(c fiber.Ctx) error {
 	user := auth.GetUser(c)
-	if user == nil || !user.IsOwner {
-		return fiber.NewError(fiber.StatusForbidden, "owner only")
+	if user == nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "not authenticated")
 	}
 
 	raw, hash, err := generateToken()
@@ -95,15 +96,11 @@ func (h *InviteHandler) Create(c fiber.Ctx) error {
 	})
 }
 
-// List returns all pending (unused, unexpired) invites. Owner-only.
+// List returns all pending (unused, unexpired) invites.
+// Requires global "users.read" permission (enforced by middleware).
 //
 // GET /v1/invites
 func (h *InviteHandler) List(c fiber.Ctx) error {
-	user := auth.GetUser(c)
-	if user == nil || !user.IsOwner {
-		return fiber.NewError(fiber.StatusForbidden, "owner only")
-	}
-
 	var invites []models.Invite
 	if err := h.db.Where("used_at IS NULL AND expires_at > ?", time.Now()).
 		Order("created_at DESC").Find(&invites).Error; err != nil {
@@ -123,15 +120,11 @@ func (h *InviteHandler) List(c fiber.Ctx) error {
 	return c.JSON(response)
 }
 
-// Revoke deletes an invite by ID. Owner-only.
+// Revoke deletes an invite by ID.
+// Requires global "users.delete" permission (enforced by middleware).
 //
 // DELETE /v1/invites/:id
 func (h *InviteHandler) Revoke(c fiber.Ctx) error {
-	user := auth.GetUser(c)
-	if user == nil || !user.IsOwner {
-		return fiber.NewError(fiber.StatusForbidden, "owner only")
-	}
-
 	id := fiber.Params[uint](c, "id")
 	if id == 0 {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid invite id")
@@ -215,5 +208,5 @@ func (h *InviteHandler) Accept(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to create session")
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(buildMeResponse(&user))
+	return c.Status(fiber.StatusCreated).JSON(buildMeResponse(&user, nil))
 }

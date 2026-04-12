@@ -2,6 +2,7 @@
     import { createQuery } from '@tanstack/svelte-query';
     import { authQueryOptions } from '$lib/api/auth';
     import { fetchUsers, suspendUser, unsuspendUser, deleteUser, type PanelUser } from '$lib/api/users';
+    import { canGlobal } from '$lib/permissions.svelte';
     import Cfxre from '$lib/components/icons/cfxre.svelte';
     import DiscordIcon from '$lib/components/icons/discord.svelte';
     import Users from '@lucide/svelte/icons/users';
@@ -20,7 +21,10 @@
 
     const authQuery = createQuery(() => authQueryOptions());
     const currentUser = $derived(authQuery.data);
-    const isOwner = $derived(currentUser?.isOwner ?? false);
+    const canRead = $derived(canGlobal(currentUser, 'users', 'read'));
+    const canUpdate = $derived(canGlobal(currentUser, 'users', 'update'));
+    const canDelete = $derived(canGlobal(currentUser, 'users', 'delete'));
+    const canCreate = $derived(canGlobal(currentUser, 'users', 'create'));
 
     let users = $state<PanelUser[]>([]);
     let isLoadingUsers = $state(true);
@@ -34,7 +38,7 @@
     let inviteCopiedId = $state<number | null>(null);
 
     $effect((): void => {
-        if (!isOwner) return;
+        if (!canRead) return;
         fetchUsers()
             .then((u): void => { users = u; isLoadingUsers = false; })
             .catch((): void => { isLoadingUsers = false; });
@@ -132,7 +136,7 @@
     }
 </script>
 
-{#if !isOwner && !authQuery.isLoading}
+{#if !canRead && !authQuery.isLoading}
     <!-- Access denied -->
     <div class="flex h-full items-center justify-center">
         <div class="text-center">
@@ -140,7 +144,7 @@
                 <ShieldAlert size={24} class="text-destructive" />
             </div>
             <p class="font-heading text-lg font-semibold text-foreground">Access Denied</p>
-            <p class="mt-1 text-sm text-muted-foreground">Only the owner can manage users.</p>
+            <p class="mt-1 text-sm text-muted-foreground">You don't have permission to manage users.</p>
         </div>
     </div>
 {:else}
@@ -180,6 +184,7 @@
                             <thead>
                                 <tr class="border-b border-border/30 text-left">
                                     <th class="px-4 py-2 text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase">User</th>
+                                    <th class="px-4 py-2 text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase">Role</th>
                                     <th class="px-4 py-2 text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase">Auth</th>
                                     <th class="px-4 py-2 text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase">Status</th>
                                     <th class="hidden px-4 py-2 text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase lg:table-cell">Created</th>
@@ -218,6 +223,29 @@
                                                     </div>
                                                 </div>
                                             </div>
+                                        </td>
+
+                                        <!-- Role -->
+                                        <td class="px-4 py-3">
+                                            {#if u.isOwner}
+                                                <span class="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-500">
+                                                    Owner
+                                                </span>
+                                            {:else if u.globalRole}
+                                                <span
+                                                    class="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                                                    style="background-color: {u.globalRole.color}20; color: {u.globalRole.color}"
+                                                >
+                                                    {u.globalRole.name}
+                                                </span>
+                                            {:else}
+                                                <span class="text-[10px] text-muted-foreground/30">None</span>
+                                            {/if}
+                                            {#if u.serverRoleCount > 0}
+                                                <span class="ml-1 text-[10px] text-muted-foreground/40" title="{u.serverRoleCount} server role(s)">
+                                                    +{u.serverRoleCount}
+                                                </span>
+                                            {/if}
                                         </td>
 
                                         <!-- Auth methods -->
@@ -261,7 +289,7 @@
 
                                         <!-- Actions -->
                                         <td class="px-4 py-3 text-right">
-                                            {#if !u.isOwner && u.id !== currentUser?.id}
+                                            {#if !u.isOwner && u.id !== currentUser?.id && (canUpdate || canDelete)}
                                                 {#if confirmDialog?.userId === u.id}
                                                     <!-- Inline confirm -->
                                                     <div class="inline-flex items-center gap-2">
@@ -324,6 +352,7 @@
             </section>
 
             <!-- Invites Section -->
+            {#if canCreate}
             <section class="users-reveal mb-8 delay-2">
                 <h2 class="mb-3 flex items-center gap-2 text-xs font-semibold tracking-widest text-muted-foreground/60 uppercase">
                     <UserPlus size={14} />
@@ -398,6 +427,7 @@
                     {/if}
                 </div>
             </section>
+            {/if}
         </div>
     </div>
 {/if}

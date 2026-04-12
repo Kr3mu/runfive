@@ -12,12 +12,9 @@ import (
 
 // User represents an authenticated user account.
 //
-// TODO: Add server-scoped RBAC. Servers are file-based (TOML configs in a
-// directory structure, not DB rows). Users need a mapping of user -> server ID
-// (from TOML) -> role, stored in DB (e.g. UserServerRole join table).
-// Roles define granular permissions per server (view, manage players, manage
-// resources, console access, etc.). IsOwner remains as the global superadmin
-// bypass that has access to all servers.
+// Authorization is handled via RBAC: GlobalRoleID grants panel-wide permissions,
+// while per-server roles are stored in the UserServerRole join table.
+// IsOwner remains as the global superadmin bypass with access to everything.
 type User struct {
 	gorm.Model
 	// Username is the unique login name chosen during registration.
@@ -28,6 +25,11 @@ type User struct {
 	IsOwner bool `gorm:"not null;default:false"`
 	// SuspendedAt is set when the account is suspended; nil means active.
 	SuspendedAt *time.Time
+	// GlobalRoleID is the role granting panel-wide (non-server) permissions.
+	// NULL means no global permissions beyond server-specific roles.
+	GlobalRoleID *uint `gorm:"column:global_role_id"`
+	// GlobalRole is the GORM association for eager loading.
+	GlobalRole *Role `gorm:"foreignKey:GlobalRoleID"`
 
 	// CfxID is the Discourse user ID from forum.cfx.re.
 	CfxID *int `gorm:"uniqueIndex"`
