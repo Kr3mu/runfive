@@ -34,6 +34,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: api/go.mod
+      - name: Build website (required for spa embed)
+        uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+        working-directory: website
+      - run: bun run build
+        working-directory: website
       - name: Run tests
         working-directory: api
         run: go test -race -count=1 ./...
