@@ -26,7 +26,7 @@ import (
 const (
 	DiscordAPIURL      = "https://discord.com/api/v10"
 	discordAuthURL     = "https://discord.com/oauth2/authorize"
-	discordTokenURL    = "https://discord.com/api/oauth2/token"
+	discordTokenURL    = "https://discord.com/api/oauth2/token" //nolint:gosec // OAuth endpoint URL, not a credential
 	discordPendingTTL  = 10 * time.Minute
 	discordCleanupTick = time.Minute
 )
@@ -129,7 +129,7 @@ func (da *DiscordAuth) StartAuth(linkUserID *uint) (string, error) {
 }
 
 // HandleCallback processes the Discord callback, exchanges the code, and fetches user data.
-func (da *DiscordAuth) HandleCallback(state, code string) (*DiscordUserData, string, *uint, error) {
+func (da *DiscordAuth) HandleCallback(state, code string) (userData *DiscordUserData, accessToken string, linkUserID *uint, err error) {
 	val, ok := da.pending.LoadAndDelete(state)
 	if !ok {
 		return nil, "", nil, fmt.Errorf("unknown or expired auth state")
@@ -145,7 +145,7 @@ func (da *DiscordAuth) HandleCallback(state, code string) (*DiscordUserData, str
 		return nil, "", nil, fmt.Errorf("exchange code: %w", err)
 	}
 
-	userData, err := fetchDiscordUser(token.AccessToken)
+	userData, err = fetchDiscordUser(token.AccessToken)
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("fetch user data: %w", err)
 	}
@@ -199,7 +199,7 @@ func fetchDiscordUser(accessToken string) (*DiscordUserData, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", DiscordAPIURL+"/users/@me", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", DiscordAPIURL+"/users/@me", http.NoBody)
 	if err != nil {
 		return nil, err
 	}

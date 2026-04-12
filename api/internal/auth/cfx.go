@@ -141,7 +141,7 @@ func (ca *CfxAuth) StartAuth(linkUserID *uint, inviteToken string) (string, erro
 // HandleCallback processes the callback from forum.cfx.re, decrypts the
 // payload, verifies the nonce, and fetches user data.
 // Returns: userData, apiKey, linkUserID, inviteToken, error.
-func (ca *CfxAuth) HandleCallback(state string, encryptedPayload string) (*CfxUserData, string, *uint, string, error) {
+func (ca *CfxAuth) HandleCallback(state, encryptedPayload string) (cfxUser *CfxUserData, apiKey string, linkUser *uint, inviteToken string, err error) {
 	val, ok := ca.pending.LoadAndDelete(state)
 	if !ok {
 		return nil, "", nil, "", fmt.Errorf("unknown or expired auth state")
@@ -171,12 +171,12 @@ func (ca *CfxAuth) HandleCallback(state string, encryptedPayload string) (*CfxUs
 		return nil, "", nil, "", fmt.Errorf("nonce mismatch")
 	}
 
-	userData, err := fetchCfxUser(payload.Key)
+	cfxUser, err = fetchCfxUser(payload.Key)
 	if err != nil {
 		return nil, "", nil, "", fmt.Errorf("fetch user data: %w", err)
 	}
 
-	return userData, payload.Key, pa.linkUserID, pa.inviteToken, nil
+	return cfxUser, payload.Key, pa.linkUserID, pa.inviteToken, nil
 }
 
 // fetchCfxUser calls forum.cfx.re/session/current.json with the User API Key
@@ -185,7 +185,7 @@ func fetchCfxUser(apiKey string) (*CfxUserData, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", CfxForumURL+"/session/current.json", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", CfxForumURL+"/session/current.json", http.NoBody)
 	if err != nil {
 		return nil, err
 	}

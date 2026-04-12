@@ -14,10 +14,11 @@ import (
 	"log"
 	"time"
 
-	"github.com/Kr3mu/runfive/internal/models"
-	"github.com/Kr3mu/runfive/internal/permissions"
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
+
+	"github.com/Kr3mu/runfive/internal/models"
+	"github.com/Kr3mu/runfive/internal/permissions"
 )
 
 const (

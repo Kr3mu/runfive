@@ -50,7 +50,7 @@ func newGormStore(db *gorm.DB) (*gormStore, error) {
 }
 
 // Find retrieves session data by token.
-func (s *gormStore) Find(token string) ([]byte, bool, error) {
+func (s *gormStore) Find(token string) (data []byte, found bool, err error) {
 	var sess session
 	result := s.db.Where("token = ? AND expiry > ?", token, time.Now()).First(&sess)
 	if result.Error != nil {

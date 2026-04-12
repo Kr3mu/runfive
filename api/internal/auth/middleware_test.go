@@ -1,13 +1,15 @@
 package auth
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/gofiber/fiber/v3"
+
 	"github.com/Kr3mu/runfive/internal/models"
 	"github.com/Kr3mu/runfive/internal/permissions"
-	"github.com/gofiber/fiber/v3"
 )
 
 // injectPerms returns middleware that sets resolved permissions in Fiber locals.
@@ -30,14 +32,15 @@ func okHandler(c fiber.Ctx) error {
 	return c.SendString("OK")
 }
 
-func doRequest(t *testing.T, app *fiber.App, method, path string) *http.Response {
+func doRequest(t *testing.T, app *fiber.App, path string) int {
 	t.Helper()
-	req := httptest.NewRequest(method, path, nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, path, http.NoBody)
 	resp, err := app.Test(req)
 	if err != nil {
 		t.Fatalf("app.Test failed: %v", err)
 	}
-	return resp
+	_ = resp.Body.Close()
+	return resp.StatusCode
 }
 
 // --- RequireGlobalPerm Tests ---
@@ -47,9 +50,9 @@ func TestRequireGlobalPerm_OwnerBypasses(t *testing.T) {
 	app.Use(injectPerms(&permissions.ResolvedPermissions{IsOwner: true}))
 	app.Get("/test", RequireGlobalPerm("users", "delete"), okHandler)
 
-	resp := doRequest(t, app, "GET", "/test")
-	if resp.StatusCode != 200 {
-		t.Fatalf("expected 200 for owner, got %d", resp.StatusCode)
+	status := doRequest(t, app, "/test")
+	if status != 200 {
+		t.Fatalf("expected 200 for owner, got %d", status)
 	}
 }
 
@@ -60,9 +63,9 @@ func TestRequireGlobalPerm_GrantedPermission(t *testing.T) {
 	}))
 	app.Get("/test", RequireGlobalPerm("users", "read"), okHandler)
 
-	resp := doRequest(t, app, "GET", "/test")
-	if resp.StatusCode != 200 {
-		t.Fatalf("expected 200 for granted permission, got %d", resp.StatusCode)
+	status := doRequest(t, app, "/test")
+	if status != 200 {
+		t.Fatalf("expected 200 for granted permission, got %d", status)
 	}
 }
 
@@ -73,9 +76,9 @@ func TestRequireGlobalPerm_DeniedPermission(t *testing.T) {
 	}))
 	app.Get("/test", RequireGlobalPerm("users", "delete"), okHandler)
 
-	resp := doRequest(t, app, "GET", "/test")
-	if resp.StatusCode != 403 {
-		t.Fatalf("expected 403 for denied permission, got %d", resp.StatusCode)
+	status := doRequest(t, app, "/test")
+	if status != 403 {
+		t.Fatalf("expected 403 for denied permission, got %d", status)
 	}
 }
 
@@ -86,9 +89,9 @@ func TestRequireGlobalPerm_MissingResource(t *testing.T) {
 	}))
 	app.Get("/test", RequireGlobalPerm("roles", "read"), okHandler)
 
-	resp := doRequest(t, app, "GET", "/test")
-	if resp.StatusCode != 403 {
-		t.Fatalf("expected 403 for missing resource, got %d", resp.StatusCode)
+	status := doRequest(t, app, "/test")
+	if status != 403 {
+		t.Fatalf("expected 403 for missing resource, got %d", status)
 	}
 }
 
@@ -97,9 +100,9 @@ func TestRequireGlobalPerm_NoPermissionsLoaded(t *testing.T) {
 	// No injectPerms — Locals("permissions") is nil
 	app.Get("/test", RequireGlobalPerm("users", "read"), okHandler)
 
-	resp := doRequest(t, app, "GET", "/test")
-	if resp.StatusCode != 403 {
-		t.Fatalf("expected 403 when no permissions loaded, got %d", resp.StatusCode)
+	status := doRequest(t, app, "/test")
+	if status != 403 {
+		t.Fatalf("expected 403 when no permissions loaded, got %d", status)
 	}
 }
 
@@ -110,9 +113,9 @@ func TestRequireGlobalPerm_EmptyPermissions(t *testing.T) {
 	}))
 	app.Get("/test", RequireGlobalPerm("users", "read"), okHandler)
 
-	resp := doRequest(t, app, "GET", "/test")
-	if resp.StatusCode != 403 {
-		t.Fatalf("expected 403 for empty permissions, got %d", resp.StatusCode)
+	status := doRequest(t, app, "/test")
+	if status != 403 {
+		t.Fatalf("expected 403 for empty permissions, got %d", status)
 	}
 }
 
@@ -123,9 +126,9 @@ func TestRequireGlobalPerm_ExplicitFalseIsDenied(t *testing.T) {
 	}))
 	app.Get("/test", RequireGlobalPerm("users", "read"), okHandler)
 
-	resp := doRequest(t, app, "GET", "/test")
-	if resp.StatusCode != 403 {
-		t.Fatalf("expected 403 for explicit false, got %d", resp.StatusCode)
+	status := doRequest(t, app, "/test")
+	if status != 403 {
+		t.Fatalf("expected 403 for explicit false, got %d", status)
 	}
 }
 
@@ -136,9 +139,9 @@ func TestRequireServerPerm_OwnerBypasses(t *testing.T) {
 	app.Use(injectPerms(&permissions.ResolvedPermissions{IsOwner: true}))
 	app.Get("/servers/:serverId/players", RequireServerPerm("players", "read"), okHandler)
 
-	resp := doRequest(t, app, "GET", "/servers/my-srv/players")
-	if resp.StatusCode != 200 {
-		t.Fatalf("expected 200 for owner, got %d", resp.StatusCode)
+	status := doRequest(t, app, "/servers/my-srv/players")
+	if status != 200 {
+		t.Fatalf("expected 200 for owner, got %d", status)
 	}
 }
 
@@ -151,9 +154,9 @@ func TestRequireServerPerm_GrantedPermission(t *testing.T) {
 	}))
 	app.Get("/servers/:serverId/players", RequireServerPerm("players", "kick"), okHandler)
 
-	resp := doRequest(t, app, "GET", "/servers/prod-1/players")
-	if resp.StatusCode != 200 {
-		t.Fatalf("expected 200 for granted server permission, got %d", resp.StatusCode)
+	status := doRequest(t, app, "/servers/prod-1/players")
+	if status != 200 {
+		t.Fatalf("expected 200 for granted server permission, got %d", status)
 	}
 }
 
@@ -167,9 +170,9 @@ func TestRequireServerPerm_WrongServer(t *testing.T) {
 	app.Get("/servers/:serverId/players", RequireServerPerm("players", "read"), okHandler)
 
 	// User has access to prod-1, but requests prod-2
-	resp := doRequest(t, app, "GET", "/servers/prod-2/players")
-	if resp.StatusCode != 403 {
-		t.Fatalf("expected 403 for wrong server, got %d", resp.StatusCode)
+	status := doRequest(t, app, "/servers/prod-2/players")
+	if status != 403 {
+		t.Fatalf("expected 403 for wrong server, got %d", status)
 	}
 }
 
@@ -182,9 +185,9 @@ func TestRequireServerPerm_DeniedAction(t *testing.T) {
 	}))
 	app.Get("/servers/:serverId/players", RequireServerPerm("players", "delete"), okHandler)
 
-	resp := doRequest(t, app, "GET", "/servers/prod-1/players")
-	if resp.StatusCode != 403 {
-		t.Fatalf("expected 403 for denied action, got %d", resp.StatusCode)
+	status := doRequest(t, app, "/servers/prod-1/players")
+	if status != 403 {
+		t.Fatalf("expected 403 for denied action, got %d", status)
 	}
 }
 
@@ -198,9 +201,9 @@ func TestRequireServerPerm_MissingServerIdParam(t *testing.T) {
 	// Route without :serverId param
 	app.Get("/test", RequireServerPerm("players", "read"), okHandler)
 
-	resp := doRequest(t, app, "GET", "/test")
-	if resp.StatusCode != 400 {
-		t.Fatalf("expected 400 for missing serverId param, got %d", resp.StatusCode)
+	status := doRequest(t, app, "/test")
+	if status != 400 {
+		t.Fatalf("expected 400 for missing serverId param, got %d", status)
 	}
 }
 
@@ -208,9 +211,9 @@ func TestRequireServerPerm_NoPermissionsLoaded(t *testing.T) {
 	app := fiber.New()
 	app.Get("/servers/:serverId/players", RequireServerPerm("players", "read"), okHandler)
 
-	resp := doRequest(t, app, "GET", "/servers/prod-1/players")
-	if resp.StatusCode != 403 {
-		t.Fatalf("expected 403 when no permissions loaded, got %d", resp.StatusCode)
+	status := doRequest(t, app, "/servers/prod-1/players")
+	if status != 403 {
+		t.Fatalf("expected 403 when no permissions loaded, got %d", status)
 	}
 }
 
@@ -226,15 +229,15 @@ func TestRequireServerPerm_ServerIdTampering(t *testing.T) {
 	app.Get("/servers/:serverId/players/kick", RequireServerPerm("players", "kick"), okHandler)
 
 	// Legitimate request
-	resp := doRequest(t, app, "GET", "/servers/server-a/players/kick")
-	if resp.StatusCode != 200 {
-		t.Fatalf("expected 200 for legitimate server, got %d", resp.StatusCode)
+	status := doRequest(t, app, "/servers/server-a/players/kick")
+	if status != 200 {
+		t.Fatalf("expected 200 for legitimate server, got %d", status)
 	}
 
 	// Tampered request
-	resp = doRequest(t, app, "GET", "/servers/server-b/players/kick")
-	if resp.StatusCode != 403 {
-		t.Fatalf("expected 403 for tampered server ID, got %d", resp.StatusCode)
+	status = doRequest(t, app, "/servers/server-b/players/kick")
+	if status != 403 {
+		t.Fatalf("expected 403 for tampered server ID, got %d", status)
 	}
 }
 
@@ -250,9 +253,9 @@ func TestGetPermissions_ReturnsNilWhenNotSet(t *testing.T) {
 		return c.SendString("OK")
 	})
 
-	resp := doRequest(t, app, "GET", "/test")
-	if resp.StatusCode != 200 {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	status := doRequest(t, app, "/test")
+	if status != 200 {
+		t.Fatalf("expected 200, got %d", status)
 	}
 }
 
@@ -271,9 +274,9 @@ func TestGetPermissions_ReturnsPermsWhenSet(t *testing.T) {
 		return c.SendString("OK")
 	})
 
-	resp := doRequest(t, app, "GET", "/test")
-	if resp.StatusCode != 200 {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	status := doRequest(t, app, "/test")
+	if status != 200 {
+		t.Fatalf("expected 200, got %d", status)
 	}
 }
 
@@ -284,9 +287,9 @@ func TestRequireMaster_OwnerAllowed(t *testing.T) {
 	app.Use(injectUser(&models.User{IsOwner: true}))
 	app.Get("/test", RequireMaster, okHandler)
 
-	resp := doRequest(t, app, "GET", "/test")
-	if resp.StatusCode != 200 {
-		t.Fatalf("expected 200 for owner, got %d", resp.StatusCode)
+	status := doRequest(t, app, "/test")
+	if status != 200 {
+		t.Fatalf("expected 200 for owner, got %d", status)
 	}
 }
 
@@ -295,9 +298,9 @@ func TestRequireMaster_NonOwnerDenied(t *testing.T) {
 	app.Use(injectUser(&models.User{IsOwner: false}))
 	app.Get("/test", RequireMaster, okHandler)
 
-	resp := doRequest(t, app, "GET", "/test")
-	if resp.StatusCode != 403 {
-		t.Fatalf("expected 403 for non-owner, got %d", resp.StatusCode)
+	status := doRequest(t, app, "/test")
+	if status != 403 {
+		t.Fatalf("expected 403 for non-owner, got %d", status)
 	}
 }
 
@@ -305,8 +308,8 @@ func TestRequireMaster_NoUserDenied(t *testing.T) {
 	app := fiber.New()
 	app.Get("/test", RequireMaster, okHandler)
 
-	resp := doRequest(t, app, "GET", "/test")
-	if resp.StatusCode != 403 {
-		t.Fatalf("expected 403 when no user set, got %d", resp.StatusCode)
+	status := doRequest(t, app, "/test")
+	if status != 403 {
+		t.Fatalf("expected 403 when no user set, got %d", status)
 	}
 }

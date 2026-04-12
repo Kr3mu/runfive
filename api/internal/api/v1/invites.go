@@ -9,10 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Kr3mu/runfive/internal/auth"
-	"github.com/Kr3mu/runfive/internal/models"
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
+
+	"github.com/Kr3mu/runfive/internal/auth"
+	"github.com/Kr3mu/runfive/internal/models"
 )
 
 const inviteTTL = 24 * time.Hour
@@ -30,7 +31,7 @@ func NewInviteHandler(db *gorm.DB, sm *auth.SessionManager, baseURL string) *Inv
 }
 
 // generateToken creates a 32-byte random token and its SHA-256 hash.
-func generateToken() (raw string, hash string, err error) {
+func generateToken() (raw, hash string, err error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", "", err
@@ -108,7 +109,8 @@ func (h *InviteHandler) List(c fiber.Ctx) error {
 	}
 
 	response := make([]models.InviteListItem, 0, len(invites))
-	for _, inv := range invites {
+	for i := range invites {
+		inv := &invites[i]
 		response = append(response, models.InviteListItem{
 			ID:        inv.ID,
 			Token:     inv.TokenRaw,

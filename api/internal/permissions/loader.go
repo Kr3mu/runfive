@@ -1,8 +1,9 @@
 package permissions
 
 import (
-	"github.com/Kr3mu/runfive/internal/models"
 	"gorm.io/gorm"
+
+	"github.com/Kr3mu/runfive/internal/models"
 )
 
 // RoleMeta holds display metadata for a role (used in API responses).
@@ -87,7 +88,8 @@ func loadServerRoles(db *gorm.DB, userID uint, rp *ResolvedPermissions) error {
 		return err
 	}
 
-	for _, a := range assignments {
+	for i := range assignments {
+		a := &assignments[i]
 		parsed, err := Parse(a.Role.ServerPerms)
 		if err != nil {
 			return err

@@ -4,11 +4,12 @@ import (
 	"errors"
 	"time"
 
+	"github.com/gofiber/fiber/v3"
+	"gorm.io/gorm"
+
 	"github.com/Kr3mu/runfive/internal/auth"
 	"github.com/Kr3mu/runfive/internal/models"
 	"github.com/Kr3mu/runfive/internal/permissions"
-	"github.com/gofiber/fiber/v3"
-	"gorm.io/gorm"
 )
 
 // Type aliases for convenience within this file.
@@ -38,7 +39,8 @@ func (h *UserHandler) List(c fiber.Ctx) error {
 	}
 
 	response := make([]models.UserListItem, 0, len(users))
-	for _, u := range users {
+	for i := range users {
+		u := &users[i]
 		item := models.UserListItem{
 			ID:          u.ID,
 			Username:    u.Username,
@@ -245,7 +247,7 @@ func (h *UserHandler) SetGlobalRole(c fiber.Ctx) error {
 			return fiber.NewError(fiber.StatusInternalServerError, "database error")
 		}
 
-		if err := checkEscalation(c, role); err != nil {
+		if err := checkEscalation(c, &role); err != nil {
 			return err
 		}
 	}
@@ -273,7 +275,8 @@ func (h *UserHandler) ListServerRoles(c fiber.Ctx) error {
 	}
 
 	response := make([]models.UserServerRoleEntry, 0, len(assignments))
-	for _, a := range assignments {
+	for i := range assignments {
+		a := &assignments[i]
 		response = append(response, models.UserServerRoleEntry{
 			ServerID: a.ServerID,
 			Role: models.RoleInfo{
@@ -326,7 +329,7 @@ func (h *UserHandler) SetServerRole(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "database error")
 	}
 
-	if err := checkEscalation(c, role); err != nil {
+	if err := checkEscalation(c, &role); err != nil {
 		return err
 	}
 
@@ -394,7 +397,7 @@ func (h *UserHandler) revokeAllSessions(userID uint) {
 
 // checkEscalation validates that a non-owner caller is not assigning a role
 // with permissions they don't have themselves.
-func checkEscalation(c fiber.Ctx, role models.Role) error {
+func checkEscalation(c fiber.Ctx, role *models.Role) error {
 	perms := auth.GetPermissions(c)
 	if perms == nil || perms.IsOwner {
 		return nil
