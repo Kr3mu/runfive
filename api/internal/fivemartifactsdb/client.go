@@ -172,7 +172,7 @@ func (c *Client) fallback(fetchErr error) (*DB, error) {
 	return nil, errors.Join(errors.New("jgscripts db unavailable"), fetchErr)
 }
 
-func parseRange(value string) (int, int, bool) {
+func parseRange(value string) (start, end int, ok bool) {
 	parts := strings.SplitN(value, "-", 2)
 	if len(parts) != 2 {
 		return 0, 0, false
@@ -181,7 +181,7 @@ func parseRange(value string) (int, int, bool) {
 	if err != nil {
 		return 0, 0, false
 	}
-	end, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+	end, err = strconv.Atoi(strings.TrimSpace(parts[1]))
 	if err != nil {
 		return 0, 0, false
 	}

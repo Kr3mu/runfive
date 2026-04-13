@@ -77,6 +77,7 @@ func EnsureReadme() error {
 		return fmt.Errorf("runtimepath: create root dir: %w", err)
 	}
 
+	//nolint:gosec // README.md is a world-readable documentation file, not a secret.
 	if err := os.WriteFile(path, embeddedReadme, 0o644); err != nil {
 		return fmt.Errorf("runtimepath: write README.md: %w", err)
 	}
