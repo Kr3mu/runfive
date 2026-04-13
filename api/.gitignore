@@ -1,9 +1,5 @@
 tmp/
-/artifacts/
-/servers/
 internal/spa/dist/*
 !internal/spa/dist/.gitkeep
 *.exe
-.runfive-keys
-database.db
 .env

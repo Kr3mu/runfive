@@ -1,7 +1,7 @@
 <script lang="ts">
     import { createQuery, useQueryClient } from "@tanstack/svelte-query";
     import { authQueryOptions } from "$lib/api/auth";
-    import { artifactsQueryOptions } from "$lib/api/artifacts";
+    import { artifactsQueryOptions, downloadArtifact } from "$lib/api/artifacts";
     import { createServer, serversQueryOptions } from "$lib/api/servers";
     import GridStack from "$lib/components/dashboard/grid-stack.svelte";
     import GridWidget from "$lib/components/dashboard/grid-widget.svelte";
@@ -56,9 +56,48 @@
         return hostOs;
     });
 
+    type CreationPhase = "idle" | "downloading" | "creating";
+
     let serverName = $state("");
     let artifactVersion = $state("");
-    let isCreatingServer = $state(false);
+
+    let creationPhase = $state<CreationPhase>("idle");
+    let phaseStartedAt = $state<number | null>(null);
+    let elapsedMs = $state(0);
+
+    const isCreatingServer = $derived(creationPhase !== "idle");
+
+    const creationPhaseLabel = $derived.by((): string => {
+        if (creationPhase === "downloading") return `Downloading build ${artifactVersion}`;
+        if (creationPhase === "creating") return "Setting up your server";
+        return "";
+    });
+
+    const creationPhaseHint = $derived.by((): string => {
+        if (creationPhase === "downloading") {
+            return "Fetching the artifact archive from runtime.fivem.net. This can take a minute on slower connections.";
+        }
+        if (creationPhase === "creating") {
+            return "Writing server.toml and registering the server with the panel.";
+        }
+        return "";
+    });
+
+    $effect((): (() => void) | void => {
+        if (creationPhase === "idle" || phaseStartedAt === null) return;
+        const start: number = phaseStartedAt;
+        const interval: number = window.setInterval((): void => {
+            elapsedMs = Date.now() - start;
+        }, 250);
+        return (): void => window.clearInterval(interval);
+    });
+
+    function formatElapsed(ms: number): string {
+        const total: number = Math.max(0, Math.floor(ms / 1000));
+        const minutes: number = Math.floor(total / 60);
+        const seconds: number = total % 60;
+        return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+    }
 
     let artifactPopoverOpen = $state(false);
     let artifactSearch = $state("");
@@ -182,19 +221,37 @@
         dashboardState.removeWidget(id);
     }
 
+    function beginPhase(phase: CreationPhase): void {
+        creationPhase = phase;
+        phaseStartedAt = Date.now();
+        elapsedMs = 0;
+    }
+
+    function resetPhase(): void {
+        creationPhase = "idle";
+        phaseStartedAt = null;
+        elapsedMs = 0;
+    }
+
     async function handleCreateServer(): Promise<void> {
-        if (isCreatingServer) return;
+        if (creationPhase !== "idle") return;
         if (!serverName.trim()) {
             toast.error("Enter a server name first");
             return;
         }
         if (!artifactVersion) {
-            toast.error("Choose an artifact version first");
+            toast.error("Choose an artifact build first");
             return;
         }
 
-        isCreatingServer = true;
         try {
+            if (!selectedArtifactInstalled) {
+                beginPhase("downloading");
+                await downloadArtifact(artifactVersion);
+                await queryClient.invalidateQueries({ queryKey: ["artifacts"] });
+            }
+
+            beginPhase("creating");
             const created = await createServer({
                 name: serverName.trim(),
                 artifactVersion,
@@ -209,12 +266,12 @@
             ]);
 
             toast.success(`Server ${created.name} is ready`);
-        } catch (error) {
-            const message =
+        } catch (error: unknown) {
+            const message: string =
                 error instanceof Error ? error.message : "Failed to create server";
             toast.error(message);
         } finally {
-            isCreatingServer = false;
+            resetPhase();
         }
     }
 </script>
@@ -417,23 +474,40 @@
                             </div>
                         </section>
 
-                        <div class="flex flex-wrap items-center justify-between gap-3">
-                            <p class="text-[11px] text-muted-foreground/60">
-                                Missing builds are downloaded before the server is created.
-                            </p>
-                            <button
-                                onclick={handleCreateServer}
-                                disabled={isCreatingServer || artifactsQuery.isPending || !serverName.trim() || !artifactVersion}
-                                class="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-                            >
-                                {#if isCreatingServer}
-                                    <LoaderCircle size={14} class="animate-spin" />
-                                    Creating...
-                                {:else}
+                        {#if isCreatingServer}
+                            <div class="rounded-lg border border-border bg-card p-4">
+                                <div class="flex items-center justify-between gap-3">
+                                    <div class="flex min-w-0 items-center gap-2">
+                                        <LoaderCircle size={14} class="shrink-0 animate-spin text-primary" />
+                                        <span class="truncate text-sm font-medium text-foreground">
+                                            {creationPhaseLabel}
+                                        </span>
+                                    </div>
+                                    <span class="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
+                                        {formatElapsed(elapsedMs)}
+                                    </span>
+                                </div>
+                                <div class="relative mt-3 h-1 overflow-hidden rounded-full bg-muted">
+                                    <div class="progress-indeterminate absolute inset-y-0 w-1/3 rounded-full bg-primary"></div>
+                                </div>
+                                <p class="mt-2 text-[11px] text-muted-foreground/60">
+                                    {creationPhaseHint}
+                                </p>
+                            </div>
+                        {:else}
+                            <div class="flex flex-wrap items-center justify-between gap-3">
+                                <p class="text-[11px] text-muted-foreground/60">
+                                    Missing builds are downloaded before the server is created.
+                                </p>
+                                <button
+                                    onclick={handleCreateServer}
+                                    disabled={artifactsQuery.isPending || !serverName.trim() || !artifactVersion}
+                                    class="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                                >
                                     Create Server
-                                {/if}
-                            </button>
-                        </div>
+                                </button>
+                            </div>
+                        {/if}
                     </div>
 
                     <aside>
@@ -581,3 +655,18 @@
         </GridStack>
     {/key}
 {/if}
+
+<style>
+    @keyframes progress-indeterminate {
+        0% {
+            left: -35%;
+        }
+        100% {
+            left: 100%;
+        }
+    }
+
+    :global(.progress-indeterminate) {
+        animation: progress-indeterminate 1.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+    }
+</style>
