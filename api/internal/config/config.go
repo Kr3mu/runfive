@@ -11,6 +11,8 @@ import (
 	"log"
 	"os"
 	"strings"
+
+	"github.com/Kr3mu/runfive/internal/runtimepath"
 )
 
 // Config holds all runtime configuration for the application.
@@ -40,7 +42,7 @@ type Config struct {
 func LoadConfig() (*Config, error) {
 	cfg := &Config{
 		Port:                envOrDefault("PORT", "5000"),
-		ArtifactsDir:        envOrDefault("ARTIFACTS_DIR", "./artifacts"),
+		ArtifactsDir:        envOrDefault("ARTIFACTS_DIR", runtimepath.Resolve("artifacts")),
 		BaseURL:             envOrDefault("BASE_URL", "http://localhost:5000"),
 		DiscordClientID:     envOrDefault("DISCORD_CLIENT_ID", ""),
 		DiscordClientSecret: envOrDefault("DISCORD_CLIENT_SECRET", ""),
@@ -112,7 +114,7 @@ func loadOrGenerateKey(envVar, fileKey string) ([]byte, error) {
 }
 
 func keyFilePath() string {
-	return ".runfive-keys"
+	return runtimepath.Resolve(".runfive-keys")
 }
 
 func loadKeyFile(path string) map[string]string {

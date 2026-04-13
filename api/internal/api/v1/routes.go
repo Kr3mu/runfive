@@ -5,6 +5,7 @@ import (
 	"github.com/Kr3mu/runfive/internal/artifacts"
 	"github.com/Kr3mu/runfive/internal/auth"
 	"github.com/Kr3mu/runfive/internal/permissions"
+	"github.com/Kr3mu/runfive/internal/runtimepath"
 	"github.com/Kr3mu/runfive/internal/serverfs"
 
 	"github.com/gofiber/fiber/v3"
@@ -17,7 +18,7 @@ func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *a
 	if err != nil {
 		panic(err)
 	}
-	serverRegistry := serverfs.NewRegistry("./servers", artifactManager)
+	serverRegistry := serverfs.NewRegistry(runtimepath.Resolve("servers"), artifactManager)
 
 	authHandler := NewAuthHandler(db, sm, cfx, fe, discord, st)
 	authGroup := r.Group("/auth")
