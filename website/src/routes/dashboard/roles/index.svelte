@@ -330,7 +330,7 @@
                                         </div>
 
                                         <!-- Actions -->
-                                        <div class="flex items-center gap-0.5" onclick={(e: MouseEvent) => e.stopPropagation()}>
+                                        <div class="flex items-center gap-0.5">
                                             {#if deleteConfirm === role.id}
                                                 <span class="mr-1 text-[11px] text-muted-foreground">Delete?</span>
                                                 <button onclick={() => handleDelete(role.id)} class="rounded-md px-2 py-0.5 text-[11px] font-medium bg-destructive/10 text-destructive hover:bg-destructive/20">Confirm</button>
@@ -406,8 +406,8 @@
 )}
     <div class="px-4 pt-4">
         <div class="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto]">
-            <div>
-                <label class="mb-1 block text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase">Name</label>
+            <label class="block">
+                <span class="mb-1 block text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase">Name</span>
                 <input
                     type="text"
                     value={name}
@@ -415,9 +415,9 @@
                     placeholder="e.g. Support"
                     class="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/25 focus:border-primary/50 focus:outline-none"
                 />
-            </div>
-            <div>
-                <label class="mb-1 block text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase">Description</label>
+            </label>
+            <label class="block">
+                <span class="mb-1 block text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase">Description</span>
                 <input
                     type="text"
                     value={desc}
@@ -425,13 +425,16 @@
                     placeholder="Optional"
                     class="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/25 focus:border-primary/50 focus:outline-none"
                 />
-            </div>
-            <div>
-                <label class="mb-1 block text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase">Color</label>
+            </label>
+            <div role="group" aria-label="Color">
+                <span class="mb-1 block text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase">Color</span>
                 <div class="flex items-center gap-1 pt-0.5">
                     {#each ROLE_COLORS as c}
                         <button
+                            type="button"
                             onclick={() => setColor(c)}
+                            aria-label="Select color {c}"
+                            aria-pressed={color === c}
                             class="h-[22px] w-[22px] rounded-full border-2 transition-all
                                 {color === c ? 'border-foreground/70 ring-1 ring-foreground/20 scale-110' : 'border-transparent hover:scale-110'}"
                             style="background-color: {c}"
