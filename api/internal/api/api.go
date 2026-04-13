@@ -16,6 +16,8 @@ import (
 type AppDeps struct {
 	// DB is the GORM database connection.
 	DB *gorm.DB
+	// ArtifactsDir is the filesystem root for shared artifact installs.
+	ArtifactsDir string
 	// SM is the session manager.
 	SM *auth.SessionManager
 	// Cfx handles Cfx.re authentication.
@@ -57,5 +59,5 @@ func New(appConfig *fiber.Config, deps AppDeps) *fiber.App {
 
 func setupRoutes(app *fiber.App, deps AppDeps) {
 	v1Group := app.Group("/v1")
-	v1.RegisterRouter(v1Group, deps.DB, deps.SM, deps.Cfx, deps.FE, deps.Discord, deps.ST, deps.BaseURL)
+	v1.RegisterRouter(v1Group, deps.DB, deps.SM, deps.Cfx, deps.FE, deps.Discord, deps.ST, deps.BaseURL, deps.ArtifactsDir)
 }

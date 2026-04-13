@@ -7,12 +7,7 @@
     import Discord from "$lib/components/icons/discord.svelte";
     import { Toaster } from "$lib/components/ui/sonner";
 
-    interface Props {
-        /** Page content rendered by the router */
-        children: Snippet;
-    }
-
-    let { children }: Props = $props();
+    let { children }: { children: Snippet } = $props();
 
     let pathname = $state(window.location.pathname);
 

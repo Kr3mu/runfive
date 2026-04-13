@@ -86,13 +86,14 @@ func main() {
 	}
 
 	app := api.New(&appConfig, api.AppDeps{
-		DB:      db,
-		SM:      sm,
-		Cfx:     cfx,
-		FE:      fe,
-		Discord: discord,
-		ST:      setupTokenStore,
-		BaseURL: cfg.BaseURL,
+		DB:           db,
+		ArtifactsDir: cfg.ArtifactsDir,
+		SM:           sm,
+		Cfx:          cfx,
+		FE:           fe,
+		Discord:      discord,
+		ST:           setupTokenStore,
+		BaseURL:      cfg.BaseURL,
 	})
 
 	if setupURL != "" {
