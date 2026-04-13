@@ -1,5 +1,4 @@
 import { queryOptions } from "@tanstack/svelte-query";
-import type { UndefinedInitialDataOptions } from "@tanstack/svelte-query";
 
 export interface Player {
     id: number;
@@ -32,12 +31,7 @@ async function fetchPlayers(): Promise<Player[]> {
     return mockPlayers;
 }
 
-export const playersQueryOptions = (): UndefinedInitialDataOptions<
-    Player[],
-    Error,
-    Player[],
-    string[]
-> =>
+export const playersQueryOptions = () =>
     queryOptions({
         queryKey: ["players"],
         queryFn: fetchPlayers,

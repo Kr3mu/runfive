@@ -8,7 +8,6 @@
     import { onMount, tick, type Snippet } from "svelte";
     import "gridstack/dist/gridstack.min.css";
     import { dashboardState } from "$lib/dashboard-state.svelte";
-    import type { GridLayoutItem } from "$lib/types/grid-layout";
 
     interface Props {
         items: GridLayoutItem[];
@@ -83,18 +82,17 @@
         });
     }
 
-    onMount(() => {
+    onMount(async () => {
+        const gs = await import("gridstack");
+        GridStackClass = gs.GridStack;
+
+        await tick();
+        initGrid();
+
         const onResize = () => {
             grid?.cellHeight(cellHeight);
         };
-
         window.addEventListener("resize", onResize);
-        void (async (): Promise<void> => {
-            const gs = await import("gridstack");
-            GridStackClass = gs.GridStack;
-            await tick();
-            initGrid();
-        })();
 
         return () => {
             window.removeEventListener("resize", onResize);

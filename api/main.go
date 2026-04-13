@@ -85,15 +85,14 @@ func main() {
 		setupURL = fmt.Sprintf("%s/?setup=%s", cfg.BaseURL, token)
 	}
 
-	app := api.New(appConfig, api.AppDeps{
-		DB:           db,
-		ArtifactsDir: cfg.ArtifactsDir,
-		SM:           sm,
-		Cfx:          cfx,
-		FE:           fe,
-		Discord:      discord,
-		ST:           setupTokenStore,
-		BaseURL:      cfg.BaseURL,
+	app := api.New(&appConfig, api.AppDeps{
+		DB:      db,
+		SM:      sm,
+		Cfx:     cfx,
+		FE:      fe,
+		Discord: discord,
+		ST:      setupTokenStore,
+		BaseURL: cfg.BaseURL,
 	})
 
 	if setupURL != "" {

@@ -29,8 +29,6 @@
         h,
         minW = 2,
         minH = 2,
-        maxW,
-        maxH,
         title,
         noResize = false,
         noMove = false,
@@ -38,25 +36,19 @@
         headerActions,
         onremove,
     }: Props = $props();
-
-    const gridAttrs = $derived({
-        "gs-id": id,
-        "gs-x": x,
-        "gs-y": y,
-        "gs-w": w,
-        "gs-h": h,
-        "gs-min-w": minW,
-        "gs-min-h": minH,
-        "gs-max-w": maxW,
-        "gs-max-h": maxH,
-        "gs-no-resize": noResize || undefined,
-        "gs-no-move": noMove || undefined,
-    });
 </script>
 
 <div
     class="grid-stack-item"
-    {...gridAttrs}
+    gs-id={id}
+    gs-x={x}
+    gs-y={y}
+    gs-w={w}
+    gs-h={h}
+    gs-min-w={minW}
+    gs-min-h={minH}
+    gs-no-resize={noResize || undefined}
+    gs-no-move={noMove || undefined}
 >
     <div class="grid-stack-item-content">
         <div class="flex h-full flex-col overflow-hidden">
