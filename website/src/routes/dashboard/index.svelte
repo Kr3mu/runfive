@@ -7,6 +7,8 @@
     import GridWidget from "$lib/components/dashboard/grid-widget.svelte";
     import Console from "$lib/components/dashboard/console.svelte";
     import PlayerList from "$lib/components/dashboard/player-list.svelte";
+    import LinuxIcon from "$lib/components/icons/linux.svelte";
+    import WindowsIcon from "$lib/components/icons/windows.svelte";
     import * as Select from "$lib/components/ui/select";
     import { dashboardState } from "$lib/dashboard-state.svelte";
     import { canGlobal } from "$lib/permissions.svelte";
@@ -17,7 +19,6 @@
     import Rocket from "@lucide/svelte/icons/rocket";
     import Server from "@lucide/svelte/icons/server";
     import ShieldAlert from "@lucide/svelte/icons/shield-alert";
-    import Boxes from "@lucide/svelte/icons/boxes";
     import HardDriveDownload from "@lucide/svelte/icons/hard-drive-download";
     import { toast } from "svelte-sonner";
 
@@ -44,6 +45,13 @@
     const upstreamOnlyArtifacts = $derived(
         (artifactsQuery.data?.available ?? []).filter((artifact) => !artifact.installed),
     );
+    const hostOs = $derived(artifactsQuery.data?.os);
+    const hostOsLabel = $derived.by((): string => {
+        if (!hostOs) return "Loading...";
+        if (hostOs === "windows") return "Windows";
+        if (hostOs === "linux") return "Linux";
+        return hostOs;
+    });
 
     let serverName = $state("");
     let artifactVersion = $state("");
@@ -137,8 +145,12 @@
                             Host Artifact Tree
                         </div>
                         <div class="mt-1 flex items-center gap-2 text-sm font-medium text-foreground">
-                            <Boxes size={15} class="text-primary" />
-                            {artifactsQuery.data?.os ?? "Loading..."}
+                            {#if hostOs === "windows"}
+                                <WindowsIcon class="h-[15px] w-[15px] text-primary" />
+                            {:else if hostOs === "linux"}
+                                <LinuxIcon class="h-[15px] w-[15px] text-primary" />
+                            {/if}
+                            {hostOsLabel}
                         </div>
                     </div>
                 </div>
