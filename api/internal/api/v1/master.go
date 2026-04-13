@@ -3,9 +3,10 @@ package v1
 import (
 	"encoding/base64"
 
-	"github.com/Kr3mu/runfive/internal/models"
 	"github.com/gofiber/fiber/v3"
 	"github.com/joho/godotenv"
+
+	"github.com/Kr3mu/runfive/internal/models"
 
 	gofiberclient "github.com/gofiber/fiber/v3/client"
 )
@@ -62,7 +63,7 @@ func (h *AuthHandler) SaveDiscordAuthentication(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
 	}
 
-	if !(req.ClientId == "" || req.ClientSecret == "") {
+	if req.ClientId != "" && req.ClientSecret != "" {
 		if err := verifyDiscordCredentials(req.ClientId, req.ClientSecret); err != nil {
 			return err
 		}

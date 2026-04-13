@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/gofiber/fiber/v3"
+	"gorm.io/gorm"
+
 	"github.com/Kr3mu/runfive/internal/auth"
 	"github.com/Kr3mu/runfive/internal/models"
 	"github.com/Kr3mu/runfive/internal/permissions"
-	"github.com/gofiber/fiber/v3"
-	"gorm.io/gorm"
 )
 
 // RoleHandler groups role management HTTP handlers.
@@ -32,7 +33,8 @@ func (h *RoleHandler) List(c fiber.Ctx) error {
 	}
 
 	response := make([]models.RoleListItem, 0, len(roles))
-	for _, r := range roles {
+	for i := range roles {
+		r := &roles[i]
 		item := models.RoleListItem{
 			ID:          r.ID,
 			Name:        r.Name,

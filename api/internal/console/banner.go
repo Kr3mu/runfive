@@ -84,17 +84,21 @@ func SetupBanner(url string) {
 	link := paint(url, ansiBold+ansiUnderline+brandYellow)
 	footnote := paint("This code is only valid until setup is complete.", ansiDim)
 
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, blank())
-	fmt.Fprintln(w, row(wordmark))
-	fmt.Fprintln(w, blank())
-	fmt.Fprintln(w, row(title))
-	fmt.Fprintln(w, blank())
-	fmt.Fprintln(w, row(intro))
-	fmt.Fprintln(w, blank())
-	fmt.Fprintln(w, row(arrow+"   "+link))
-	fmt.Fprintln(w, blank())
-	fmt.Fprintln(w, row(footnote))
-	fmt.Fprintln(w, blank())
-	fmt.Fprintln(w)
+	// p is a short-hand that silences errcheck for cosmetic-only writes
+	// where a terminal I/O failure is unrecoverable anyway.
+	p := func(a ...any) { _, _ = fmt.Fprintln(w, a...) }
+
+	p()
+	p(blank())
+	p(row(wordmark))
+	p(blank())
+	p(row(title))
+	p(blank())
+	p(row(intro))
+	p(blank())
+	p(row(arrow + "   " + link))
+	p(blank())
+	p(row(footnote))
+	p(blank())
+	p()
 }

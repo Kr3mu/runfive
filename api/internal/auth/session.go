@@ -89,8 +89,8 @@ func (sm *SessionManager) CreateSession(c fiber.Ctx, userID uint) (string, error
 // LoadSession reads the session cookie, looks up the session in the store,
 // decrypts it, and returns the stored user ID.
 // Returns 0 and an empty string if no valid session exists.
-func (sm *SessionManager) LoadSession(c fiber.Ctx) (uint, string, error) {
-	token := c.Cookies(cookieName)
+func (sm *SessionManager) LoadSession(c fiber.Ctx) (userID uint, token string, err error) {
+	token = c.Cookies(cookieName)
 	if token == "" {
 		return 0, "", nil
 	}
@@ -120,7 +120,7 @@ func (sm *SessionManager) LoadSession(c fiber.Ctx) (uint, string, error) {
 		return 0, "", nil
 	}
 
-	userID, ok := userIDRaw.(uint)
+	userID, ok = userIDRaw.(uint)
 	if !ok {
 		return 0, "", nil
 	}

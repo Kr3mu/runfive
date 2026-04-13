@@ -60,7 +60,7 @@ func LoadConfig() (*Config, error) {
 	return cfg, nil
 }
 
-func envOrDefault(key string, fallback string) string {
+func envOrDefault(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
 	}
@@ -70,7 +70,7 @@ func envOrDefault(key string, fallback string) string {
 // loadOrGenerateKey checks the environment variable first, then falls back
 // to the key file. If neither exists, a new random key is generated and
 // written to the key file.
-func loadOrGenerateKey(envVar string, fileKey string) ([]byte, error) {
+func loadOrGenerateKey(envVar, fileKey string) ([]byte, error) {
 	if v := os.Getenv(envVar); v != "" {
 		decoded, err := base64.StdEncoding.DecodeString(v)
 		if err != nil {
@@ -136,5 +136,5 @@ func saveKeyFile(path string, entries map[string]string) error {
 	for k, v := range entries {
 		lines = append(lines, k+"="+v)
 	}
-	return os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0600)
+	return os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600)
 }

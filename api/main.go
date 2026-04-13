@@ -7,14 +7,15 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/gofiber/fiber/v3"
+	"github.com/joho/godotenv"
+
 	"github.com/Kr3mu/runfive/internal/api"
 	"github.com/Kr3mu/runfive/internal/auth"
 	"github.com/Kr3mu/runfive/internal/config"
 	"github.com/Kr3mu/runfive/internal/console"
 	"github.com/Kr3mu/runfive/internal/database"
 	"github.com/Kr3mu/runfive/internal/models"
-	"github.com/gofiber/fiber/v3"
-	"github.com/joho/godotenv"
 )
 
 var appConfig = fiber.Config{
@@ -40,7 +41,7 @@ var listenPort = flag.String("port", "", "HTTP listen port (overrides PORT env)"
 
 func main() {
 	flag.Parse()
-	godotenv.Load(".env")
+	_ = godotenv.Load(".env")
 
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -84,14 +85,14 @@ func main() {
 		setupURL = fmt.Sprintf("%s/?setup=%s", cfg.BaseURL, token)
 	}
 
-	app := api.New(appConfig, api.AppDeps{
-		DB:  db,
-		SM:  sm,
-		Cfx: cfx,
-		FE:  fe,
-    Discord: discord,
-		ST:  setupTokenStore,
-    BaseURL: cfg.BaseURL,
+	app := api.New(&appConfig, api.AppDeps{
+		DB:      db,
+		SM:      sm,
+		Cfx:     cfx,
+		FE:      fe,
+		Discord: discord,
+		ST:      setupTokenStore,
+		BaseURL: cfg.BaseURL,
 	})
 
 	if setupURL != "" {

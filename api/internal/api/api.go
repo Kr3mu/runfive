@@ -2,13 +2,14 @@
 package api
 
 import (
-	v1 "github.com/Kr3mu/runfive/internal/api/v1"
-	"github.com/Kr3mu/runfive/internal/auth"
-	"github.com/Kr3mu/runfive/internal/spa"
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/helmet"
 	"github.com/gofiber/fiber/v3/middleware/logger"
 	"gorm.io/gorm"
+
+	v1 "github.com/Kr3mu/runfive/internal/api/v1"
+	"github.com/Kr3mu/runfive/internal/auth"
+	"github.com/Kr3mu/runfive/internal/spa"
 )
 
 // AppDeps bundles all dependencies needed to construct the HTTP application.
@@ -19,8 +20,8 @@ type AppDeps struct {
 	SM *auth.SessionManager
 	// Cfx handles Cfx.re authentication.
 	Cfx *auth.CfxAuth
-    // Discord handles Discord authentication.
-    Discord *auth.DiscordAuth
+	// Discord handles Discord authentication.
+	Discord *auth.DiscordAuth
 	// FE encrypts sensitive database fields.
 	FE *auth.FieldEncryptor
 	// ST holds the ephemeral setup token gating the initial /register call.
@@ -36,8 +37,8 @@ type AppDeps struct {
 // only visible output in the terminal. Access logging resumes
 // automatically once the owner account is created and the store is
 // cleared — no restart required.
-func New(appConfig fiber.Config, deps AppDeps) *fiber.App {
-	app := fiber.New(appConfig)
+func New(appConfig *fiber.Config, deps AppDeps) *fiber.App {
+	app := fiber.New(*appConfig)
 
 	setupActive := deps.ST != nil && deps.ST.IsActive()
 

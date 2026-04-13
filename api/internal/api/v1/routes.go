@@ -2,10 +2,11 @@
 package v1
 
 import (
-	"github.com/Kr3mu/runfive/internal/auth"
-	"github.com/Kr3mu/runfive/internal/permissions"
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
+
+	"github.com/Kr3mu/runfive/internal/auth"
+	"github.com/Kr3mu/runfive/internal/permissions"
 )
 
 // RegisterRouter mounts all v1 API routes on the provided router group.
