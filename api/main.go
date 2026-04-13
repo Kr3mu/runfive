@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/joho/godotenv"
@@ -16,6 +17,7 @@ import (
 	"github.com/Kr3mu/runfive/internal/console"
 	"github.com/Kr3mu/runfive/internal/database"
 	"github.com/Kr3mu/runfive/internal/models"
+	"github.com/Kr3mu/runfive/internal/runtimepath"
 )
 
 var appConfig = fiber.Config{
@@ -42,6 +44,18 @@ var listenPort = flag.String("port", "", "HTTP listen port (overrides PORT env)"
 func main() {
 	flag.Parse()
 	_ = godotenv.Load(".env")
+
+	log.Printf("Data root:     %s", runtimepath.Root())
+	log.Printf("Servers dir:   %s", runtimepath.Resolve("servers"))
+	log.Printf("Artifacts dir: %s", runtimepath.Resolve("artifacts"))
+
+	if err := os.MkdirAll(runtimepath.Root(), 0o750); err != nil {
+		log.Fatalf("Failed to create runtime root %q: %v", runtimepath.Root(), err)
+	}
+
+	if err := runtimepath.EnsureReadme(); err != nil {
+		log.Printf("Warning: could not write runtime README: %v", err)
+	}
 
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -85,14 +99,15 @@ func main() {
 		setupURL = fmt.Sprintf("%s/?setup=%s", cfg.BaseURL, token)
 	}
 
-	app := api.New(&appConfig, api.AppDeps{
-		DB:      db,
-		SM:      sm,
-		Cfx:     cfx,
-		FE:      fe,
-		Discord: discord,
-		ST:      setupTokenStore,
-		BaseURL: cfg.BaseURL,
+	app := api.New(&appConfig, &api.AppDeps{
+		DB:           db,
+		ArtifactsDir: cfg.ArtifactsDir,
+		SM:           sm,
+		Cfx:          cfx,
+		FE:           fe,
+		Discord:      discord,
+		ST:           setupTokenStore,
+		BaseURL:      cfg.BaseURL,
 	})
 
 	if setupURL != "" {

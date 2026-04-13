@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/Kr3mu/runfive/internal/models"
+	"github.com/Kr3mu/runfive/internal/runtimepath"
 )
 
 var databaseConfig = &gorm.Config{}
@@ -18,7 +19,7 @@ var databaseConfig = &gorm.Config{}
 // Connect opens the SQLite database and runs auto-migrations
 // for all registered models.
 func Connect() (*gorm.DB, error) {
-	db, err := gorm.Open(sqlite.Open("database.db?_journal_mode=WAL&_busy_timeout=5000"), databaseConfig)
+	db, err := gorm.Open(sqlite.Open(runtimepath.Resolve("database.db")+"?_journal_mode=WAL&_busy_timeout=5000"), databaseConfig)
 	if err != nil {
 		return nil, err
 	}

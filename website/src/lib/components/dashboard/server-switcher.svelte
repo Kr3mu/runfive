@@ -11,11 +11,14 @@
     import Search from "@lucide/svelte/icons/search";
     import X from "@lucide/svelte/icons/x";
     import ServerCog from "@lucide/svelte/icons/server-cog";
+    import Plus from "@lucide/svelte/icons/plus";
     import {
         serversQueryOptions,
         type ManagedServer,
         type ServerStatus,
     } from "$lib/api/servers";
+    import { authQueryOptions } from "$lib/api/auth";
+    import { canGlobal } from "$lib/permissions.svelte";
     import { serverState } from "$lib/server-state.svelte";
 
     interface Props {
@@ -32,9 +35,11 @@
     let searchQuery = $state("");
 
     const servers = createQuery(() => serversQueryOptions());
+    const authQuery = createQuery(() => authQueryOptions());
 
     const list = $derived(servers.data ?? []);
     const selected = $derived(serverState.resolve(list));
+    const canCreateServers = $derived(canGlobal(authQuery.data, "servers", "create"));
 
     /** Servers appearing before the active one in list order (≤3 case). */
     const beforeActive = $derived(() => {
@@ -382,6 +387,29 @@
                 {/if}
             </div>
 
+            {#if canCreateServers}
+                <div class="mx-1 mt-2 mb-1">
+                    <a
+                        href="/dashboard/new"
+                        data-view-transition
+                        onclick={() => (popoverOpen = false)}
+                        class="group flex items-center gap-2.5 rounded-lg border border-dashed border-border/60 bg-background/30 px-2 py-2 transition-all hover:border-primary/50 hover:bg-primary/5"
+                    >
+                        <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-dashed border-border/60 text-muted-foreground/60 transition-colors group-hover:border-primary/60 group-hover:bg-primary/10 group-hover:text-primary">
+                            <Plus size={13} strokeWidth={2.2} />
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="font-heading text-[12px] font-semibold text-foreground/80 transition-colors group-hover:text-foreground">
+                                New Server
+                            </div>
+                            <div class="text-[9.5px] text-muted-foreground/50">
+                                Add another FiveM instance
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            {/if}
+
             <div class="mx-1 mt-1 h-px bg-border/40"></div>
 
             <a
@@ -476,6 +504,32 @@
                         </div>
                     {/if}
                 </div>
+            </div>
+        {/if}
+
+        {#if inlineOpen && canCreateServers}
+            <div
+                transition:slide={{ duration: 180, easing: cubicOut }}
+                class="mt-2"
+            >
+                <a
+                    href="/dashboard/new"
+                    data-view-transition
+                    onclick={() => (inlineOpen = false)}
+                    class="group flex items-center gap-2 rounded-lg border border-dashed border-border/60 bg-background/30 px-2 py-2 transition-all hover:border-primary/50 hover:bg-primary/5"
+                >
+                    <div class="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-dashed border-border/60 text-muted-foreground/60 transition-colors group-hover:border-primary/60 group-hover:bg-primary/10 group-hover:text-primary">
+                        <Plus size={11} strokeWidth={2.2} />
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <div class="font-heading text-[11px] font-semibold text-foreground/80 transition-colors group-hover:text-foreground">
+                            New Server
+                        </div>
+                        <div class="text-[9px] text-muted-foreground/50">
+                            Add another FiveM instance
+                        </div>
+                    </div>
+                </a>
             </div>
         {/if}
     </div>

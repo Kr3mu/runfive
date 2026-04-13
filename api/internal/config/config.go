@@ -11,12 +11,16 @@ import (
 	"log"
 	"os"
 	"strings"
+
+	"github.com/Kr3mu/runfive/internal/runtimepath"
 )
 
 // Config holds all runtime configuration for the application.
 type Config struct {
 	// HTTP listen port
 	Port string
+	// ArtifactsDir is the root directory for shared FiveM artifact installs.
+	ArtifactsDir string
 	// SessionEncryptKey is the AES-256 key used to encrypt session data at rest in the sessions table.
 	SessionEncryptKey [32]byte
 	// CfxAPIKeySecret is the AES-256 key used to encrypt stored Cfx.re API keys in the users table.
@@ -38,6 +42,7 @@ type Config struct {
 func LoadConfig() (*Config, error) {
 	cfg := &Config{
 		Port:                envOrDefault("PORT", "5000"),
+		ArtifactsDir:        envOrDefault("ARTIFACTS_DIR", runtimepath.Resolve("artifacts")),
 		BaseURL:             envOrDefault("BASE_URL", "http://localhost:5000"),
 		DiscordClientID:     envOrDefault("DISCORD_CLIENT_ID", ""),
 		DiscordClientSecret: envOrDefault("DISCORD_CLIENT_SECRET", ""),
@@ -109,7 +114,7 @@ func loadOrGenerateKey(envVar, fileKey string) ([]byte, error) {
 }
 
 func keyFilePath() string {
-	return ".runfive-keys"
+	return runtimepath.Resolve(".runfive-keys")
 }
 
 func loadKeyFile(path string) map[string]string {
