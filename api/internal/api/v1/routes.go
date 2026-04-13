@@ -39,18 +39,14 @@ func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *a
 	master.Post("/savediscord", authHandler.SaveDiscordAuthentication)
 	master.Get("/getdiscord", authHandler.GetDiscordAuthentication)
 
-	// --- RBAC-protected routes ---
-	authed := r.Group("", auth.RequireAuth(sm, db), auth.LoadPermissions(db))
-
-	// Invite endpoints
+	// Invite endpoints — public routes MUST be registered before any
+	// auth middleware is mounted on the parent router, otherwise Fiber's
+	// Use() will gate them too.
 	inviteHandler := NewInviteHandler(db, sm, baseURL)
 	inviteGroup := r.Group("/invites")
-
-	// Public invite endpoints (no auth required)
 	inviteGroup.Get("/:token/validate", inviteHandler.Validate)
 	inviteGroup.Post("/:token/accept", inviteHandler.Accept)
 
-	// Protected invite endpoints (require users permission)
 	inviteProtected := inviteGroup.Group("", auth.RequireAuth(sm, db), auth.LoadPermissions(db))
 	inviteProtected.Post("", auth.RequireGlobalPerm(permissions.GlobalUsers, permissions.ActionCreate), inviteHandler.Create)
 	inviteProtected.Get("", auth.RequireGlobalPerm(permissions.GlobalUsers, permissions.ActionRead), inviteHandler.List)
@@ -58,7 +54,7 @@ func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *a
 
 	// User management endpoints (permission-based)
 	userHandler := NewUserHandler(db, sm)
-	userGroup := authed.Group("/users")
+	userGroup := r.Group("/users", auth.RequireAuth(sm, db), auth.LoadPermissions(db))
 	userGroup.Get("", auth.RequireGlobalPerm(permissions.GlobalUsers, permissions.ActionRead), userHandler.List)
 	userGroup.Post("/:id/suspend", auth.RequireGlobalPerm(permissions.GlobalUsers, permissions.ActionUpdate), userHandler.Suspend)
 	userGroup.Post("/:id/unsuspend", auth.RequireGlobalPerm(permissions.GlobalUsers, permissions.ActionUpdate), userHandler.Unsuspend)
@@ -72,7 +68,7 @@ func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *a
 
 	// Role management endpoints (permission-based)
 	roleHandler := NewRoleHandler(db)
-	roleGroup := authed.Group("/roles")
+	roleGroup := r.Group("/roles", auth.RequireAuth(sm, db), auth.LoadPermissions(db))
 	roleGroup.Get("", auth.RequireGlobalPerm(permissions.GlobalRoles, permissions.ActionRead), roleHandler.List)
 	roleGroup.Post("", auth.RequireGlobalPerm(permissions.GlobalRoles, permissions.ActionCreate), roleHandler.Create)
 	roleGroup.Get("/:id", auth.RequireGlobalPerm(permissions.GlobalRoles, permissions.ActionRead), roleHandler.Get)
@@ -80,5 +76,6 @@ func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *a
 	roleGroup.Delete("/:id", auth.RequireGlobalPerm(permissions.GlobalRoles, permissions.ActionDelete), roleHandler.Delete)
 
 	// Permission schema endpoint (any authenticated user)
-	authed.Get("/permissions/schema", PermissionSchema)
+	permGroup := r.Group("/permissions", auth.RequireAuth(sm, db), auth.LoadPermissions(db))
+	permGroup.Get("/schema", PermissionSchema)
 }
