@@ -15,6 +15,7 @@ type artifactManager interface {
 	HostOS() string
 	ListInstalled() ([]models.InstalledArtifact, error)
 	ListAvailable(context.Context) ([]models.AvailableArtifactVersion, error)
+	RecommendedVersion(context.Context) string
 	Install(context.Context, string) (models.InstalledArtifact, error)
 	Delete(version string) error
 }
@@ -38,20 +39,23 @@ func NewArtifactHandler(manager artifactManager, registry artifactReferenceRegis
 //
 // GET /v1/artifacts
 func (h *ArtifactHandler) List(c fiber.Ctx) error {
+	ctx := context.Background()
+
 	installed, err := h.manager.ListInstalled()
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
-	available, err := h.manager.ListAvailable(context.Background())
+	available, err := h.manager.ListAvailable(ctx)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadGateway, err.Error())
 	}
 
 	return c.JSON(models.ArtifactListResponse{
-		OS:        h.manager.HostOS(),
-		Installed: installed,
-		Available: available,
+		OS:          h.manager.HostOS(),
+		Recommended: h.manager.RecommendedVersion(ctx),
+		Installed:   installed,
+		Available:   available,
 	})
 }
 

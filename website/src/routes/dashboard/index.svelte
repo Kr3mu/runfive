@@ -9,17 +9,23 @@
     import PlayerList from "$lib/components/dashboard/player-list.svelte";
     import LinuxIcon from "$lib/components/icons/linux.svelte";
     import WindowsIcon from "$lib/components/icons/windows.svelte";
-    import * as Select from "$lib/components/ui/select";
     import { dashboardState } from "$lib/dashboard-state.svelte";
     import { canGlobal } from "$lib/permissions.svelte";
     import { serverState } from "$lib/server-state.svelte";
     import { getWidgetDef } from "$lib/widget-registry";
     import type { GridLayoutItem } from "$lib/types/grid-layout";
+    import type { AvailableArtifactVersion } from "$lib/api/artifacts";
     import LoaderCircle from "@lucide/svelte/icons/loader-circle";
-    import Rocket from "@lucide/svelte/icons/rocket";
+    import Eye from "@lucide/svelte/icons/eye";
+    import ListChecks from "@lucide/svelte/icons/list-checks";
     import Server from "@lucide/svelte/icons/server";
     import ShieldAlert from "@lucide/svelte/icons/shield-alert";
     import HardDriveDownload from "@lucide/svelte/icons/hard-drive-download";
+    import Search from "@lucide/svelte/icons/search";
+    import Check from "@lucide/svelte/icons/check";
+    import ChevronDown from "@lucide/svelte/icons/chevron-down";
+    import Sparkles from "@lucide/svelte/icons/sparkles";
+    import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
     import { toast } from "svelte-sonner";
 
     const widgetMap: Record<string, { component: typeof Console; title: string }> = {
@@ -42,9 +48,6 @@
     }));
 
     const installedArtifacts = $derived(artifactsQuery.data?.installed ?? []);
-    const upstreamOnlyArtifacts = $derived(
-        (artifactsQuery.data?.available ?? []).filter((artifact) => !artifact.installed),
-    );
     const hostOs = $derived(artifactsQuery.data?.os);
     const hostOsLabel = $derived.by((): string => {
         if (!hostOs) return "Loading...";
@@ -57,19 +60,117 @@
     let artifactVersion = $state("");
     let isCreatingServer = $state(false);
 
-    const selectedArtifactLabel = $derived.by(() => {
-        if (!artifactVersion) return "Choose an artifact version";
-        if (installedArtifacts.find((artifact) => artifact.version === artifactVersion)) {
-            return `${artifactVersion} · Installed locally`;
+    let artifactPopoverOpen = $state(false);
+    let artifactSearch = $state("");
+    let artifactSearchInput = $state<HTMLInputElement | null>(null);
+
+    const recommendedVersion = $derived(artifactsQuery.data?.recommended ?? "");
+
+    const selectedArtifactEntry = $derived(
+        artifactsQuery.data?.available.find((a: AvailableArtifactVersion): boolean => a.version === artifactVersion),
+    );
+    const selectedArtifactInstalled = $derived(
+        Boolean(selectedArtifactEntry?.installed),
+    );
+    const selectedArtifactBroken = $derived(
+        Boolean(selectedArtifactEntry?.brokenReason),
+    );
+
+    const selectedArtifactLabel = $derived.by((): string => {
+        if (!artifactVersion) return "Choose a build";
+        if (selectedArtifactInstalled) return `${artifactVersion} · Ready to use`;
+        return `${artifactVersion} · Downloads on create`;
+    });
+
+    /**
+     * Curated list shown when no search is active: the community-recommended
+     * build first, then the newest non-broken upstream versions up to a small
+     * cap. Keeps the default view small.
+     */
+    const curatedOptions = $derived.by((): AvailableArtifactVersion[] => {
+        const all: AvailableArtifactVersion[] = artifactsQuery.data?.available ?? [];
+        if (all.length === 0) return [];
+
+        const result: AvailableArtifactVersion[] = [];
+        const recommended: AvailableArtifactVersion | undefined = recommendedVersion
+            ? all.find((a: AvailableArtifactVersion): boolean => a.version === recommendedVersion)
+            : undefined;
+
+        if (recommended) result.push(recommended);
+
+        const maxCurated = 5;
+        for (const entry of all) {
+            if (result.length >= maxCurated) break;
+            if (entry.brokenReason) continue;
+            if (entry.version === recommendedVersion) continue;
+            result.push(entry);
         }
-        return `${artifactVersion} · Download on create`;
+
+        return result;
+    });
+
+    const searchResults = $derived.by((): AvailableArtifactVersion[] => {
+        const term: string = artifactSearch.trim().toLowerCase();
+        if (!term) return [];
+        const all: AvailableArtifactVersion[] = artifactsQuery.data?.available ?? [];
+        return all
+            .filter((a: AvailableArtifactVersion): boolean => a.version.toLowerCase().includes(term))
+            .slice(0, 50);
+    });
+
+    const displayedOptions = $derived(
+        artifactSearch.trim() ? searchResults : curatedOptions,
+    );
+
+    function selectArtifact(version: string): void {
+        artifactVersion = version;
+        artifactSearch = "";
+        artifactPopoverOpen = false;
+    }
+
+    function openArtifactPopover(): void {
+        if (artifactPopoverOpen) return;
+        artifactPopoverOpen = true;
+        setTimeout((): void => artifactSearchInput?.focus(), 0);
+    }
+
+    function closeArtifactPopover(): void {
+        artifactPopoverOpen = false;
+        artifactSearch = "";
+    }
+
+    function handleSearchKeydown(event: KeyboardEvent): void {
+        if (event.key === "Escape") {
+            event.preventDefault();
+            closeArtifactPopover();
+            return;
+        }
+        if (event.key === "Enter") {
+            event.preventDefault();
+            const first: AvailableArtifactVersion | undefined = displayedOptions[0];
+            if (first) selectArtifact(first.version);
+        }
+    }
+
+    /**
+     * Mirrors `sanitizeDirName` in api/internal/serverfs/registry.go so the
+     * preview folder path matches what the backend will actually create.
+     */
+    const folderPreview = $derived.by((): string => {
+        let slug: string = serverName.trim();
+        slug = slug.replace(/\s+/g, "_");
+        slug = slug.replace(/[^A-Za-z0-9_-]+/g, "_");
+        slug = slug.replace(/_+/g, "_");
+        slug = slug.replace(/^[_\-.]+|[_\-.]+$/g, "");
+        return slug === "" ? "server" : slug;
     });
 
     $effect((): void => {
         if (!shouldLoadArtifacts || artifactVersion || !artifactsQuery.data) return;
         artifactVersion =
+            artifactsQuery.data.recommended ??
+            curatedOptions[0]?.version ??
             artifactsQuery.data.installed[0]?.version ??
-            artifactsQuery.data.available[0]?.version ??
             "";
     });
 
@@ -123,174 +224,331 @@
         <LoaderCircle size={20} class="animate-spin text-muted-foreground" />
     </div>
 {:else if servers.length === 0}
-    <div class="flex h-full items-center justify-center overflow-y-auto px-6 py-10">
-        {#if canCreateServers}
-            <section class="w-full max-w-3xl rounded-[2rem] border border-border/60 bg-card/90 p-6 shadow-[0_24px_80px_-40px_rgba(0,0,0,0.65)] backdrop-blur-sm">
-                <div class="mb-8 flex flex-wrap items-start justify-between gap-4">
-                    <div class="max-w-xl">
-                        <div class="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/8 px-3 py-1 text-[11px] font-semibold tracking-[0.18em] text-primary uppercase">
-                            <Rocket size={12} />
-                            First Server Setup
-                        </div>
-                        <h1 class="font-heading text-3xl font-semibold text-foreground">
-                            Build the panel around your first FiveM server
-                        </h1>
-                        <p class="mt-2 text-sm leading-6 text-muted-foreground">
-                            RunFive now reads real servers from the `servers` directory and shares artifact installs from the host cache. Start with a name and the artifact build you want this server to reference.
-                        </p>
-                    </div>
+    <div class="flex h-full flex-col overflow-y-auto">
+        <div class="mx-auto w-full max-w-5xl px-6 py-8">
+            {#if canCreateServers}
+                <h1 class="mb-1 text-lg font-semibold text-foreground">
+                    Create your first server
+                </h1>
+                <p class="mb-8 text-sm text-muted-foreground">
+                    Give it a name and pick a FiveM build. Everything else is wired up for you.
+                </p>
 
-                    <div class="rounded-3xl border border-border/60 bg-background/70 px-4 py-3">
-                        <div class="text-[10px] font-semibold tracking-[0.16em] text-muted-foreground/50 uppercase">
-                            Host Artifact Tree
-                        </div>
-                        <div class="mt-1 flex items-center gap-2 text-sm font-medium text-foreground">
-                            {#if hostOs === "windows"}
-                                <WindowsIcon class="h-[15px] w-[15px] text-primary" />
-                            {:else if hostOs === "linux"}
-                                <LinuxIcon class="h-[15px] w-[15px] text-primary" />
-                            {/if}
-                            {hostOsLabel}
-                        </div>
-                    </div>
-                </div>
+                <div class="grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+                    <div>
+                        <section class="mb-8">
+                            <h2 class="mb-3 flex items-center gap-2 text-xs font-semibold tracking-widest text-muted-foreground/60 uppercase">
+                                <Server size={14} />
+                                Server
+                            </h2>
+                            <div class="rounded-lg border border-border bg-card p-4">
+                                <label for="server-name" class="mb-1.5 block text-xs font-medium text-muted-foreground">
+                                    Name
+                                </label>
+                                <input
+                                    id="server-name"
+                                    bind:value={serverName}
+                                    type="text"
+                                    maxlength="64"
+                                    placeholder="RunFive RP"
+                                    class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/40 focus:border-primary/50"
+                                />
+                                <p class="mt-2 text-[11px] text-muted-foreground/60">
+                                    Spaces become underscores in the folder name.
+                                </p>
+                            </div>
+                        </section>
 
-                <div class="grid gap-6 lg:grid-cols-[1.25fr_0.95fr]">
-                    <div class="rounded-[1.5rem] border border-border/50 bg-background/60 p-5">
-                        <label class="mb-2 block text-[11px] font-semibold tracking-[0.14em] text-muted-foreground/55 uppercase" for="server-name">
-                            Server Name
-                        </label>
-                        <input
-                            id="server-name"
-                            bind:value={serverName}
-                            type="text"
-                            maxlength="64"
-                            placeholder="RunFive RP"
-                            class="h-11 w-full rounded-3xl border border-border/70 bg-background px-4 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/35 focus:border-primary/40"
-                        />
-                        <p class="mt-2 text-xs text-muted-foreground/55">
-                            The folder name is generated automatically and spaces are converted to `_`.
-                        </p>
+                        <section class="mb-8">
+                            <h2 class="mb-3 flex items-center gap-2 text-xs font-semibold tracking-widest text-muted-foreground/60 uppercase">
+                                <HardDriveDownload size={14} />
+                                Artifact Build
+                            </h2>
+                            <div class="rounded-lg border border-border bg-card p-4">
+                                {#if artifactsQuery.isPending}
+                                    <div class="flex h-10 items-center gap-2 text-sm text-muted-foreground/60">
+                                        <LoaderCircle size={14} class="animate-spin" />
+                                        Loading catalog...
+                                    </div>
+                                {:else if artifactsQuery.error}
+                                    <div class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                                        {artifactsQuery.error.message}
+                                    </div>
+                                {:else}
+                                    <div class="relative">
+                                        <button
+                                            type="button"
+                                            onclick={openArtifactPopover}
+                                            class="flex h-10 w-full items-center justify-between gap-2 rounded-md border border-border bg-background px-3 text-left text-sm transition-colors hover:border-primary/40 focus:border-primary/50 focus:outline-none"
+                                        >
+                                            <span class="flex min-w-0 flex-1 items-center gap-2">
+                                                {#if selectedArtifactBroken}
+                                                    <TriangleAlert size={13} class="shrink-0 text-destructive" />
+                                                {/if}
+                                                <span class="truncate {artifactVersion ? (selectedArtifactBroken ? 'text-destructive' : 'text-foreground') : 'text-muted-foreground/45'}">
+                                                    {selectedArtifactLabel}
+                                                </span>
+                                            </span>
+                                            <ChevronDown size={14} class="shrink-0 text-muted-foreground/60" />
+                                        </button>
 
-                        <div class="mt-5">
-                            <p class="mb-2 block text-[11px] font-semibold tracking-[0.14em] text-muted-foreground/55 uppercase">
-                                Artifact Version
+                                        {#if artifactPopoverOpen}
+                                            <button
+                                                type="button"
+                                                class="fixed inset-0 z-40 cursor-default"
+                                                aria-label="Close build picker"
+                                                onclick={closeArtifactPopover}
+                                            ></button>
+
+                                            <div class="absolute top-full right-0 left-0 z-50 mt-2 overflow-hidden rounded-md border border-border bg-popover shadow-[0_16px_48px_-24px_rgba(0,0,0,0.65)]">
+                                                <div class="border-b border-border p-2">
+                                                    <div class="relative">
+                                                        <Search size={13} class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground/50" />
+                                                        <input
+                                                            bind:this={artifactSearchInput}
+                                                            bind:value={artifactSearch}
+                                                            type="text"
+                                                            placeholder="Search by build number..."
+                                                            onkeydown={handleSearchKeydown}
+                                                            class="h-8 w-full rounded bg-background pr-2 pl-7 text-sm text-foreground outline-none placeholder:text-muted-foreground/40"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div class="max-h-72 overflow-y-auto py-1">
+                                                    {#if displayedOptions.length === 0}
+                                                        <div class="px-3 py-6 text-center text-xs text-muted-foreground/60">
+                                                            {artifactSearch.trim() ? "No builds match" : "No builds available"}
+                                                        </div>
+                                                    {:else}
+                                                        {#if !artifactSearch.trim()}
+                                                            <div class="flex items-center gap-1.5 px-3 pt-1 pb-1.5 text-[10px] font-semibold tracking-wider text-muted-foreground/50 uppercase">
+                                                                <Sparkles size={10} />
+                                                                Curated
+                                                            </div>
+                                                        {/if}
+                                                        {#each displayedOptions as option (option.version)}
+                                                            {@const isRecommended = option.version === recommendedVersion}
+                                                            {@const isSelected = option.version === artifactVersion}
+                                                            <button
+                                                                type="button"
+                                                                onclick={() => selectArtifact(option.version)}
+                                                                class="flex w-full items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-accent {isSelected ? 'bg-accent/60' : ''}"
+                                                            >
+                                                                <div class="min-w-0 flex-1">
+                                                                    <div class="flex flex-wrap items-center gap-1.5">
+                                                                        <span class="font-mono text-sm {option.brokenReason ? 'text-destructive/80' : 'text-foreground'}">
+                                                                            {option.version}
+                                                                        </span>
+                                                                        {#if isRecommended}
+                                                                            <span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-500">
+                                                                                <Sparkles size={9} />
+                                                                                Recommended
+                                                                            </span>
+                                                                        {/if}
+                                                                        {#if option.installed}
+                                                                            <span class="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+                                                                                Installed
+                                                                            </span>
+                                                                        {/if}
+                                                                        {#if option.brokenReason}
+                                                                            <span class="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-1.5 py-0.5 text-[9px] font-semibold text-destructive">
+                                                                                <TriangleAlert size={9} />
+                                                                                Broken
+                                                                            </span>
+                                                                        {/if}
+                                                                    </div>
+                                                                    {#if option.brokenReason}
+                                                                        <p class="mt-0.5 line-clamp-2 text-[11px] text-destructive/70">
+                                                                            {option.brokenReason}
+                                                                        </p>
+                                                                    {/if}
+                                                                </div>
+                                                                {#if isSelected}
+                                                                    <Check size={14} class="mt-1 shrink-0 text-primary" />
+                                                                {/if}
+                                                            </button>
+                                                        {/each}
+                                                    {/if}
+                                                </div>
+
+                                                <div class="flex items-center justify-between gap-2 border-t border-border bg-muted/30 px-3 py-1.5 text-[10px] text-muted-foreground/60">
+                                                    {#if !artifactSearch.trim() && artifactsQuery.data}
+                                                        <span>Type a number to search all {artifactsQuery.data.available.length} builds.</span>
+                                                    {:else}
+                                                        <span></span>
+                                                    {/if}
+                                                    <a
+                                                        href="https://github.com/jgscripts/fivem-artifacts-db"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        class="shrink-0 text-muted-foreground/60 transition-colors hover:text-foreground"
+                                                    >
+                                                        Stability data by jgscripts
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        {/if}
+                                    </div>
+                                {/if}
+
+                                {#if selectedArtifactBroken && selectedArtifactEntry?.brokenReason}
+                                    <div class="mt-3 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-[11px] text-destructive">
+                                        <TriangleAlert size={13} class="mt-0.5 shrink-0" />
+                                        <span><span class="font-semibold">Known issue:</span> {selectedArtifactEntry.brokenReason}</span>
+                                    </div>
+                                {/if}
+
+                                {#if artifactsQuery.data}
+                                    <div class="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground/60">
+                                        <span>Builds for</span>
+                                        {#if hostOs === "windows"}
+                                            <WindowsIcon class="h-3 w-3 text-primary" />
+                                        {:else if hostOs === "linux"}
+                                            <LinuxIcon class="h-3 w-3 text-primary" />
+                                        {/if}
+                                        <span class="font-medium text-foreground/80">{hostOsLabel}</span>
+                                        <span class="text-muted-foreground/40">·</span>
+                                        <span>{installedArtifacts.length} installed</span>
+                                        <span class="text-muted-foreground/40">·</span>
+                                        <span>{artifactsQuery.data.available.length} upstream</span>
+                                    </div>
+                                {/if}
+                            </div>
+                        </section>
+
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            <p class="text-[11px] text-muted-foreground/60">
+                                Missing builds are downloaded before the server is created.
                             </p>
-
-                            {#if artifactsQuery.isPending}
-                                <div class="flex h-11 items-center gap-2 rounded-3xl border border-border/60 bg-background px-4 text-sm text-muted-foreground/60">
-                                    <LoaderCircle size={14} class="animate-spin" />
-                                    Loading artifact catalog...
-                                </div>
-                            {:else if artifactsQuery.error}
-                                <div class="rounded-3xl border border-destructive/20 bg-destructive/6 px-4 py-3 text-sm text-destructive/80">
-                                    {artifactsQuery.error.message}
-                                </div>
-                            {:else}
-                                <Select.Root type="single" bind:value={artifactVersion}>
-                                    <Select.Trigger class="h-11 w-full rounded-3xl border border-border/70 bg-background px-4 text-left">
-                                        <span class={artifactVersion ? "text-foreground" : "text-muted-foreground/45"}>
-                                            {selectedArtifactLabel}
-                                        </span>
-                                    </Select.Trigger>
-                                    <Select.Content class="max-h-80">
-                                        {#if installedArtifacts.length > 0}
-                                            <Select.Group>
-                                                <Select.GroupHeading>Installed</Select.GroupHeading>
-                                                {#each installedArtifacts as artifact (artifact.version)}
-                                                    <Select.Item value={artifact.version}>
-                                                        <div class="flex w-full items-center justify-between gap-3">
-                                                            <span>{artifact.version}</span>
-                                                            <span class="text-xs text-emerald-500/80">Ready</span>
-                                                        </div>
-                                                    </Select.Item>
-                                                {/each}
-                                            </Select.Group>
-                                        {/if}
-
-                                        {#if upstreamOnlyArtifacts.length > 0}
-                                            <Select.Group>
-                                                <Select.GroupHeading>Available Upstream</Select.GroupHeading>
-                                                {#each upstreamOnlyArtifacts as artifact (artifact.version)}
-                                                    <Select.Item value={artifact.version}>
-                                                        <div class="flex w-full items-center justify-between gap-3">
-                                                            <span>{artifact.version}</span>
-                                                            <span class="text-xs text-muted-foreground/55">Download</span>
-                                                        </div>
-                                                    </Select.Item>
-                                                {/each}
-                                            </Select.Group>
-                                        {/if}
-                                    </Select.Content>
-                                </Select.Root>
-                            {/if}
-                        </div>
-
-                        <div class="mt-6 flex flex-wrap items-center gap-3">
                             <button
                                 onclick={handleCreateServer}
-                                disabled={isCreatingServer || artifactsQuery.isPending || !artifactVersion}
-                                class="inline-flex h-11 items-center gap-2 rounded-3xl bg-primary px-5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                                disabled={isCreatingServer || artifactsQuery.isPending || !serverName.trim() || !artifactVersion}
+                                class="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                             >
                                 {#if isCreatingServer}
                                     <LoaderCircle size={14} class="animate-spin" />
-                                    Creating server...
+                                    Creating...
                                 {:else}
-                                    <Server size={15} />
                                     Create Server
                                 {/if}
                             </button>
-                            <span class="text-xs text-muted-foreground/55">
-                                If the build is not installed yet, RunFive downloads it before writing `server.toml`.
-                            </span>
                         </div>
                     </div>
 
-                    <div class="rounded-[1.5rem] border border-border/50 bg-gradient-to-br from-background via-background to-primary/6 p-5">
-                        <h2 class="flex items-center gap-2 text-sm font-semibold text-foreground">
-                            <HardDriveDownload size={15} class="text-primary" />
-                            Shared Artifacts
-                        </h2>
-                        <p class="mt-2 text-sm leading-6 text-muted-foreground">
-                            Artifacts are extracted once under
-                            <code>artifacts/{artifactsQuery.data?.os ?? "host"}/&lt;version&gt;</code>
-                            and every managed server points at that shared install through <code>artifact_version</code>.
-                        </p>
+                    <aside>
+                        <section class="mb-8">
+                            <h2 class="mb-3 flex items-center gap-2 text-xs font-semibold tracking-widest text-muted-foreground/60 uppercase">
+                                <Eye size={14} />
+                                Preview
+                            </h2>
+                            <div class="rounded-lg border border-border bg-card p-4">
+                                <div class="mb-3 flex items-start justify-between gap-3">
+                                    <div class="min-w-0 flex-1">
+                                        <p class="truncate text-sm font-semibold text-foreground">
+                                            {serverName.trim() || "Unnamed server"}
+                                        </p>
+                                        <p class="mt-0.5 truncate font-mono text-[11px] text-muted-foreground/60">
+                                            servers/{folderPreview}/
+                                        </p>
+                                    </div>
+                                    <span class="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted-foreground/10 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                        Draft
+                                    </span>
+                                </div>
 
-                        <div class="mt-5 space-y-3">
-                            <div class="rounded-2xl border border-border/50 bg-background/75 p-4">
-                                <div class="text-[10px] font-semibold tracking-[0.16em] text-muted-foreground/45 uppercase">
-                                    Installed Locally
-                                </div>
-                                <div class="mt-2 text-2xl font-semibold text-foreground">
-                                    {installedArtifacts.length}
+                                <div class="space-y-2 border-t border-border pt-3">
+                                    <div class="flex items-center justify-between gap-3 text-xs">
+                                        <span class="text-muted-foreground/60">Artifact</span>
+                                        {#if artifactVersion}
+                                            <span class="flex min-w-0 items-center gap-1.5">
+                                                <span class="font-mono text-foreground">{artifactVersion}</span>
+                                                {#if selectedArtifactInstalled}
+                                                    <span class="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-500">
+                                                        Ready
+                                                    </span>
+                                                {:else}
+                                                    <span class="rounded-full bg-muted-foreground/10 px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">
+                                                        Will download
+                                                    </span>
+                                                {/if}
+                                            </span>
+                                        {:else}
+                                            <span class="text-muted-foreground/40">Not selected</span>
+                                        {/if}
+                                    </div>
+                                    <div class="flex items-center justify-between gap-3 text-xs">
+                                        <span class="text-muted-foreground/60">Host</span>
+                                        <span class="inline-flex items-center gap-1.5 text-foreground">
+                                            {#if hostOs === "windows"}
+                                                <WindowsIcon class="h-3 w-3 text-primary" />
+                                            {:else if hostOs === "linux"}
+                                                <LinuxIcon class="h-3 w-3 text-primary" />
+                                            {/if}
+                                            {hostOsLabel}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="rounded-2xl border border-border/50 bg-background/75 p-4">
-                                <div class="text-[10px] font-semibold tracking-[0.16em] text-muted-foreground/45 uppercase">
-                                    Upstream Choices
-                                </div>
-                                <div class="mt-2 text-2xl font-semibold text-foreground">
-                                    {artifactsQuery.data?.available.length ?? 0}
-                                </div>
-                            </div>
-                        </div>
+                        </section>
+
+                        <section>
+                            <h2 class="mb-3 flex items-center gap-2 text-xs font-semibold tracking-widest text-muted-foreground/60 uppercase">
+                                <ListChecks size={14} />
+                                What happens next
+                            </h2>
+                            <ol class="space-y-3">
+                                <li class="flex gap-3">
+                                    <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">1</span>
+                                    <div>
+                                        <p class="text-xs font-medium text-foreground">Folder is created</p>
+                                        <p class="mt-0.5 text-[11px] text-muted-foreground/60">
+                                            A clean <code class="font-mono text-[10px]">server.toml</code> lands in the server folder.
+                                        </p>
+                                    </div>
+                                </li>
+                                <li class="flex gap-3">
+                                    <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">2</span>
+                                    <div>
+                                        <p class="text-xs font-medium text-foreground">Artifact is linked</p>
+                                        <p class="mt-0.5 text-[11px] text-muted-foreground/60">
+                                            {#if selectedArtifactInstalled}
+                                                Already installed — instant link.
+                                            {:else if artifactVersion}
+                                                Downloaded from the FiveM runtime, then shared with every future server.
+                                            {:else}
+                                                Downloaded on first use if needed, shared across all servers.
+                                            {/if}
+                                        </p>
+                                    </div>
+                                </li>
+                                <li class="flex gap-3">
+                                    <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">3</span>
+                                    <div>
+                                        <p class="text-xs font-medium text-foreground">You land on the dashboard</p>
+                                        <p class="mt-0.5 text-[11px] text-muted-foreground/60">
+                                            Console, players, resources — ready to configure.
+                                        </p>
+                                    </div>
+                                </li>
+                            </ol>
+                        </section>
+                    </aside>
+                </div>
+            {:else}
+                <div class="mx-auto max-w-md rounded-lg border border-border bg-card p-8 text-center">
+                    <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
+                        <ShieldAlert size={20} class="text-destructive" />
                     </div>
+                    <h1 class="text-lg font-semibold text-foreground">
+                        No servers available
+                    </h1>
+                    <p class="mx-auto mt-2 max-w-sm text-sm text-muted-foreground">
+                        This account can't see any servers and doesn't have permission to create one. Ask an owner to grant you access.
+                    </p>
                 </div>
-            </section>
-        {:else}
-            <section class="w-full max-w-xl rounded-[2rem] border border-border/60 bg-card/90 p-8 text-center shadow-[0_24px_80px_-40px_rgba(0,0,0,0.65)] backdrop-blur-sm">
-                <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
-                    <ShieldAlert size={28} class="text-destructive" />
-                </div>
-                <h1 class="mt-5 font-heading text-2xl font-semibold text-foreground">
-                    No servers are visible to this account
-                </h1>
-                <p class="mt-2 text-sm leading-6 text-muted-foreground">
-                    RunFive did not discover any accessible entries under the `servers` directory, and this account does not have permission to create a new one.
-                </p>
-            </section>
-        {/if}
+            {/if}
+        </div>
     </div>
 {:else}
     {#key dashboardState.revision}

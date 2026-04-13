@@ -10,10 +10,14 @@ export interface InstalledArtifact {
 export interface AvailableArtifactVersion {
     version: string;
     installed: boolean;
+    /** Upstream-reported reason this build is known broken, if any. */
+    brokenReason?: string;
 }
 
 export interface ArtifactListResponse {
     os: string;
+    /** Community-recommended stable build from jgscripts/fivem-artifacts-db. */
+    recommended?: string;
     installed: InstalledArtifact[];
     available: AvailableArtifactVersion[];
 }

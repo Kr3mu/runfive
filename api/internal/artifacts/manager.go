@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Kr3mu/runfive/internal/fivemartifactsdb"
 	"github.com/Kr3mu/runfive/internal/fxserver"
 	"github.com/Kr3mu/runfive/internal/models"
 )
@@ -30,10 +31,15 @@ type upstreamClient interface {
 	ResolveTag(context.Context, string) (string, error)
 }
 
+type stabilityClient interface {
+	FetchDB(context.Context) (*fivemartifactsdb.DB, error)
+}
+
 // Manager coordinates shared artifact installs on disk.
 type Manager struct {
 	rootDir         string
 	upstream        upstreamClient
+	stability       stabilityClient
 	downloadArchive func(context.Context, string, string) error
 	extractArchive  func(string, string) error
 
@@ -53,12 +59,40 @@ func NewManager(rootDir string) (*Manager, error) {
 	return &Manager{
 		rootDir:         rootDir,
 		upstream:        client,
+		stability:       fivemartifactsdb.NewClient(),
 		downloadArchive: downloadToFile,
 		extractArchive: func(archivePath, dest string) error {
 			return extractArchive(client.HostOS(), archivePath, dest)
 		},
 		locks: make(map[string]*sync.Mutex),
 	}, nil
+}
+
+// RecommendedVersion returns the community-recommended build from the jgscripts
+// database, or an empty string if the lookup fails. Never returns an error — a
+// missing recommendation is a soft failure.
+func (m *Manager) RecommendedVersion(ctx context.Context) string {
+	if m.stability == nil {
+		return ""
+	}
+	db, err := m.stability.FetchDB(ctx)
+	if err != nil || db == nil {
+		return ""
+	}
+	return strings.TrimSpace(db.RecommendedArtifact)
+}
+
+// BrokenReasons returns the known-broken version → reason map from the jgscripts
+// database, or an empty map if the lookup fails.
+func (m *Manager) BrokenReasons(ctx context.Context) map[string]string {
+	if m.stability == nil {
+		return map[string]string{}
+	}
+	db, err := m.stability.FetchDB(ctx)
+	if err != nil || db == nil {
+		return map[string]string{}
+	}
+	return db.BrokenReasons()
 }
 
 // HostOS returns the artifact tree managed on this machine.
@@ -94,7 +128,8 @@ func (m *Manager) ListInstalled() ([]models.InstalledArtifact, error) {
 	return installed, nil
 }
 
-// ListAvailable returns all upstream versions, annotated with local install state.
+// ListAvailable returns all upstream versions, annotated with local install state
+// and broken-artifact reasons from the community stability database.
 func (m *Manager) ListAvailable(ctx context.Context) ([]models.AvailableArtifactVersion, error) {
 	versions, err := m.upstream.ListVersions(ctx)
 	if err != nil {
@@ -111,11 +146,14 @@ func (m *Manager) ListAvailable(ctx context.Context) ([]models.AvailableArtifact
 		installedSet[item.Version] = true
 	}
 
+	brokenReasons := m.BrokenReasons(ctx)
+
 	available := make([]models.AvailableArtifactVersion, 0, len(versions))
 	for _, version := range versions {
 		available = append(available, models.AvailableArtifactVersion{
-			Version:   version,
-			Installed: installedSet[version],
+			Version:      version,
+			Installed:    installedSet[version],
+			BrokenReason: brokenReasons[version],
 		})
 	}
 

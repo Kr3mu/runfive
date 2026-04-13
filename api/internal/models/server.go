@@ -39,15 +39,17 @@ type InstalledArtifact struct {
 
 // AvailableArtifactVersion represents one upstream artifact version.
 type AvailableArtifactVersion struct {
-	Version   string `json:"version"`
-	Installed bool   `json:"installed"`
+	Version      string `json:"version"`
+	Installed    bool   `json:"installed"`
+	BrokenReason string `json:"brokenReason,omitempty"`
 }
 
 // ArtifactListResponse is returned by GET /v1/artifacts.
 type ArtifactListResponse struct {
-	OS        string                     `json:"os"`
-	Installed []InstalledArtifact        `json:"installed"`
-	Available []AvailableArtifactVersion `json:"available"`
+	OS          string                     `json:"os"`
+	Recommended string                     `json:"recommended,omitempty"`
+	Installed   []InstalledArtifact        `json:"installed"`
+	Available   []AvailableArtifactVersion `json:"available"`
 }
 
 // DownloadArtifactRequest is the body for POST /v1/artifacts/download.
