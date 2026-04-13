@@ -186,7 +186,6 @@
                             </span>
                         {:else}
                             <button
-                                disabled={!discordStatus}
                                 onclick={handleLinkCfx}
                                 class="inline-flex items-center gap-1.5 rounded-md bg-[#F40552] px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90"
                             >
@@ -230,9 +229,10 @@
                             </span>
                         {:else}
                             <button
+                                disabled={!discordStatus}
                                 onclick={handleLinkDiscord}
                                 class="inline-flex items-center gap-1.5 rounded-md bg-[#5865F2] px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
-                                title="Connect Discord"
+                                title={discordStatus ? "Connect Discord" : "Discord OAuth not configured"}
                             >
                                 <LinkIcon size={12} />
                                 Connect
