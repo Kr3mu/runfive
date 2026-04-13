@@ -140,8 +140,8 @@ func baseURLForOS(hostOS string) (string, error) {
 	}
 }
 
-func fetchPage(ctx context.Context, url string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+func fetchPage(ctx context.Context, pageURL string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("fxserver: build request: %w", err)
 	}
@@ -151,22 +151,24 @@ func fetchPage(ctx context.Context, url string) ([]byte, error) {
 
 	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("fxserver: fetch %s: %w", url, err)
+		return nil, fmt.Errorf("fxserver: fetch %s: %w", pageURL, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fxserver: fetch %s: unexpected status %d", url, resp.StatusCode)
+		return nil, fmt.Errorf("fxserver: fetch %s: unexpected status %d", pageURL, resp.StatusCode)
 	}
 
 	reader, err := decodeBody(resp)
 	if err != nil {
-		return nil, fmt.Errorf("fxserver: decode %s: %w", url, err)
+		return nil, fmt.Errorf("fxserver: decode %s: %w", pageURL, err)
 	}
 
 	body, err := io.ReadAll(reader)
 	if err != nil {
-		return nil, fmt.Errorf("fxserver: read %s: %w", url, err)
+		return nil, fmt.Errorf("fxserver: read %s: %w", pageURL, err)
 	}
 
 	return body, nil
@@ -207,15 +209,18 @@ func extractArtifactTags(body []byte) []string {
 		}
 
 		for _, segment := range strings.Split(value, "/") {
-			if matches := artifactTagPattern.FindStringSubmatch(segment); len(matches) == 2 {
-				tag := matches[1]
-				if _, ok := seen[tag]; ok {
-					return
-				}
-				seen[tag] = struct{}{}
-				tags = append(tags, tag)
+			matches := artifactTagPattern.FindStringSubmatch(segment)
+			if len(matches) != 2 {
+				continue
+			}
+
+			tag := matches[1]
+			if _, ok := seen[tag]; ok {
 				return
 			}
+			seen[tag] = struct{}{}
+			tags = append(tags, tag)
+			return
 		}
 	}
 
@@ -237,6 +242,8 @@ func extractArtifactTags(body []byte) []string {
 			}
 		case html.TextToken:
 			addTag(string(tokenizer.Text()))
+		case html.EndTagToken, html.CommentToken, html.DoctypeToken:
+			continue
 		}
 	}
 }

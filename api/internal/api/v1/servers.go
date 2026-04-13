@@ -4,9 +4,10 @@ import (
 	"context"
 	"strings"
 
+	"github.com/gofiber/fiber/v3"
+
 	"github.com/Kr3mu/runfive/internal/auth"
 	"github.com/Kr3mu/runfive/internal/models"
-	"github.com/gofiber/fiber/v3"
 )
 
 type serverRegistry interface {

@@ -32,14 +32,16 @@ type upstreamClient interface {
 
 // Manager coordinates shared artifact installs on disk.
 type Manager struct {
-	rootDir        string
-	upstream       upstreamClient
+	rootDir         string
+	upstream        upstreamClient
 	downloadArchive func(context.Context, string, string) error
 	extractArchive  func(string, string) error
 
 	lockMu sync.Mutex
 	locks  map[string]*sync.Mutex
 }
+
+const maxExtractedFileSize int64 = 4 << 30
 
 // NewManager creates an artifact manager for the configured root directory.
 func NewManager(rootDir string) (*Manager, error) {
@@ -151,10 +153,12 @@ func (m *Manager) Install(ctx context.Context, version string) (models.Installed
 	archivePath := filepath.Join(stagingRoot, "artifact"+m.upstream.ArchiveExtension())
 	finalDir := m.installedDir(version)
 
-	if err := os.MkdirAll(extractRoot, 0o755); err != nil {
+	if err := os.MkdirAll(extractRoot, 0o750); err != nil {
 		return models.InstalledArtifact{}, fmt.Errorf("create staging dir: %w", err)
 	}
-	defer os.RemoveAll(stagingRoot)
+	defer func() {
+		_ = os.RemoveAll(stagingRoot)
+	}()
 
 	if err := m.downloadArchive(ctx, m.upstream.DownloadURL(tag), archivePath); err != nil {
 		return models.InstalledArtifact{}, err
@@ -164,7 +168,7 @@ func (m *Manager) Install(ctx context.Context, version string) (models.Installed
 		return models.InstalledArtifact{}, err
 	}
 
-	if err := os.MkdirAll(filepath.Dir(finalDir), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(finalDir), 0o750); err != nil {
 		return models.InstalledArtifact{}, fmt.Errorf("create artifact OS dir: %w", err)
 	}
 
@@ -233,8 +237,8 @@ func sortInstalled(items []models.InstalledArtifact) {
 	})
 }
 
-func downloadToFile(ctx context.Context, url string, dest string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+func downloadToFile(ctx context.Context, url, dest string) (err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return fmt.Errorf("download artifact: build request: %w", err)
 	}
@@ -243,17 +247,26 @@ func downloadToFile(ctx context.Context, url string, dest string) error {
 	if err != nil {
 		return fmt.Errorf("download artifact: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("download artifact: close response body: %w", closeErr)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download artifact: unexpected status %d", resp.StatusCode)
 	}
 
+	//nolint:gosec // destination is built by the manager inside its private staging directory.
 	file, err := os.Create(dest)
 	if err != nil {
 		return fmt.Errorf("download artifact: create file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("download artifact: close file: %w", closeErr)
+		}
+	}()
 
 	if _, err := io.Copy(file, resp.Body); err != nil {
 		return fmt.Errorf("download artifact: write file: %w", err)
@@ -273,12 +286,16 @@ func extractArchive(hostOS, archivePath, dest string) error {
 	}
 }
 
-func extractZip(archivePath, dest string) error {
+func extractZip(archivePath, dest string) (err error) {
 	reader, err := zip.OpenReader(archivePath)
 	if err != nil {
 		return fmt.Errorf("extract zip: %w", err)
 	}
-	defer reader.Close()
+	defer func() {
+		if closeErr := reader.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("extract zip: close archive: %w", closeErr)
+		}
+	}()
 
 	for _, file := range reader.File {
 		target, err := secureJoin(dest, file.Name)
@@ -287,13 +304,13 @@ func extractZip(archivePath, dest string) error {
 		}
 
 		if file.FileInfo().IsDir() {
-			if err := os.MkdirAll(target, 0o755); err != nil {
+			if err := os.MkdirAll(target, 0o750); err != nil {
 				return fmt.Errorf("extract zip: mkdir %s: %w", target, err)
 			}
 			continue
 		}
 
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
 			return fmt.Errorf("extract zip: mkdir parent: %w", err)
 		}
 
@@ -307,20 +324,37 @@ func extractZip(archivePath, dest string) error {
 			mode = 0o644
 		}
 
+		if file.UncompressedSize64 > uint64(maxExtractedFileSize) {
+			_ = in.Close()
+			return fmt.Errorf("extract zip: file %s exceeds size limit", file.Name)
+		}
+
+		//nolint:gosec // target is validated by secureJoin to stay within the extraction root.
 		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 		if err != nil {
-			in.Close()
+			_ = in.Close()
 			return fmt.Errorf("extract zip: create target: %w", err)
 		}
 
-		if _, err := io.Copy(out, in); err != nil {
-			out.Close()
-			in.Close()
-			return fmt.Errorf("extract zip: copy: %w", err)
+		written, copyErr := io.Copy(out, io.LimitReader(in, maxExtractedFileSize+1))
+		closeOutErr := out.Close()
+		closeInErr := in.Close()
+		if copyErr != nil {
+			return fmt.Errorf("extract zip: copy: %w", copyErr)
+		}
+		if written > maxExtractedFileSize {
+			return fmt.Errorf("extract zip: file %s exceeds size limit", file.Name)
+		}
+		if closeOutErr != nil {
+			return fmt.Errorf("extract zip: close target: %w", closeOutErr)
+		}
+		if closeInErr != nil {
+			return fmt.Errorf("extract zip: close source: %w", closeInErr)
 		}
 
-		out.Close()
-		in.Close()
+		if err := os.Chmod(target, mode); err != nil {
+			return fmt.Errorf("extract zip: chmod: %w", err)
+		}
 	}
 
 	return nil
@@ -331,6 +365,7 @@ func extractTarXZ(archivePath, dest string) error {
 		return fmt.Errorf("extract tar.xz: tar not available: %w", err)
 	}
 
+	//nolint:gosec // archivePath and dest are generated by the application, not user shell input.
 	cmd := exec.Command("tar", "-xJf", archivePath, "-C", dest)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -338,7 +373,7 @@ func extractTarXZ(archivePath, dest string) error {
 	}
 
 	// A quick walk forces early surfacing of traversal issues from weird archives.
-	return filepath.WalkDir(dest, func(path string, d fs.DirEntry, walkErr error) error {
+	return filepath.WalkDir(dest, func(path string, _ fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}

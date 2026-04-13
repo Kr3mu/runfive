@@ -7,11 +7,11 @@ package database
 import (
 	"log"
 
-	"github.com/Kr3mu/runfive/internal/runtimepath"
 	"github.com/libtnb/sqlite"
 	"gorm.io/gorm"
 
 	"github.com/Kr3mu/runfive/internal/models"
+	"github.com/Kr3mu/runfive/internal/runtimepath"
 )
 
 var databaseConfig = &gorm.Config{}

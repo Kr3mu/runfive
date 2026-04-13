@@ -6,8 +6,9 @@ import (
 	"io/fs"
 	"strings"
 
-	"github.com/Kr3mu/runfive/internal/models"
 	"github.com/gofiber/fiber/v3"
+
+	"github.com/Kr3mu/runfive/internal/models"
 )
 
 type artifactManager interface {

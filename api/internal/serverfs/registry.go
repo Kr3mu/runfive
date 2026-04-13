@@ -98,7 +98,7 @@ func (r *Registry) Create(name, artifactVersion string) (models.ManagedServer, e
 		return models.ManagedServer{}, fmt.Errorf("artifact version %s is not installed", artifactVersion)
 	}
 
-	if err := os.MkdirAll(r.rootDir, 0o755); err != nil {
+	if err := os.MkdirAll(r.rootDir, 0o750); err != nil {
 		return models.ManagedServer{}, fmt.Errorf("create servers root: %w", err)
 	}
 
@@ -108,7 +108,7 @@ func (r *Registry) Create(name, artifactVersion string) (models.ManagedServer, e
 	}
 
 	serverDir := filepath.Join(r.rootDir, dirID)
-	if err := os.MkdirAll(serverDir, 0o755); err != nil {
+	if err := os.MkdirAll(serverDir, 0o750); err != nil {
 		return models.ManagedServer{}, fmt.Errorf("create server dir: %w", err)
 	}
 
@@ -186,11 +186,16 @@ func sanitizeDirName(name string) string {
 }
 
 func readConfig(path string) (Config, error) {
+	//nolint:gosec // path is constructed from the registry root plus discovered server directories.
 	file, err := os.Open(path)
 	if err != nil {
 		return Config{}, err
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("close server config: %w", closeErr)
+		}
+	}()
 
 	var cfg Config
 	scanner := bufio.NewScanner(file)
@@ -234,7 +239,7 @@ func readConfig(path string) (Config, error) {
 func writeConfig(path string, cfg Config) error {
 	tempPath := path + ".tmp"
 	content := fmt.Sprintf("name = %s\nartifact_version = %s\n", strconv.Quote(cfg.Name), strconv.Quote(cfg.ArtifactVersion))
-	if err := os.WriteFile(tempPath, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(tempPath, []byte(content), 0o600); err != nil {
 		return fmt.Errorf("write server config: %w", err)
 	}
 	if err := os.Rename(tempPath, path); err != nil {

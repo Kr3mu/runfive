@@ -85,7 +85,7 @@ func main() {
 		setupURL = fmt.Sprintf("%s/?setup=%s", cfg.BaseURL, token)
 	}
 
-	app := api.New(&appConfig, api.AppDeps{
+	app := api.New(&appConfig, &api.AppDeps{
 		DB:           db,
 		ArtifactsDir: cfg.ArtifactsDir,
 		SM:           sm,

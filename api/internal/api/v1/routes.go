@@ -2,18 +2,18 @@
 package v1
 
 import (
+	"github.com/gofiber/fiber/v3"
+	"gorm.io/gorm"
+
 	"github.com/Kr3mu/runfive/internal/artifacts"
 	"github.com/Kr3mu/runfive/internal/auth"
 	"github.com/Kr3mu/runfive/internal/permissions"
 	"github.com/Kr3mu/runfive/internal/runtimepath"
 	"github.com/Kr3mu/runfive/internal/serverfs"
-
-	"github.com/gofiber/fiber/v3"
-	"gorm.io/gorm"
 )
 
 // RegisterRouter mounts all v1 API routes on the provided router group.
-func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *auth.CfxAuth, fe *auth.FieldEncryptor, discord *auth.DiscordAuth, st *auth.SetupTokenStore, baseURL string, artifactsDir string) {
+func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *auth.CfxAuth, fe *auth.FieldEncryptor, discord *auth.DiscordAuth, st *auth.SetupTokenStore, baseURL, artifactsDir string) {
 	artifactManager, err := artifacts.NewManager(artifactsDir)
 	if err != nil {
 		panic(err)
