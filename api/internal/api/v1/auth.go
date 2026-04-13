@@ -325,9 +325,9 @@ func (h *AuthHandler) CfxCallback(c fiber.Ctx) error {
 			"cfx_api_key":    encryptedKey,
 		})
 		if result.Error != nil {
-			return c.Redirect().To("/dashboard?error=link_failed")
+			return c.Redirect().To("/dashboard/settings?error=link_failed")
 		}
-		return c.Redirect().To("/dashboard")
+		return c.Redirect().To("/dashboard/settings")
 	}
 
 	// Branch 2: invite registration (create new account via cfx.re)
@@ -435,9 +435,9 @@ func (h *AuthHandler) DiscordCallback(c fiber.Ctx) error {
 			"discord_avatar":   avatarURL,
 		})
 		if result.Error != nil {
-			return c.Redirect().To("/dashboard?error=link_failed")
+			return c.Redirect().To("/dashboard/settings?error=link_failed")
 		}
-		return c.Redirect().To("/dashboard")
+		return c.Redirect().To("/dashboard/settings")
 	}
 
 	var user models.User
