@@ -1,16 +1,24 @@
 /**
  * Dashboard layout codec — encodes/decodes widget layouts to compact URL-safe strings.
  *
- * Format (bit-packed, then base62-encoded):
- *   Header:  3 bits version (currently 0) + 3 bits widget count (1-8)
- *   Per widget: 5 bits type ID + 4 bits x + 4 bits y + 4 bits w + 4 bits h = 21 bits
+ * Format:
+ *   Char 0: format version (single base62 digit)
+ *   Char 1: widget count (single base62 digit, 1-8)
+ *   Char 2+: bit-packed widget data, 21 bits per widget
+ *           (5 bits type ID + 4 bits x + 4 bits y + 4 bits w + 4 bits h),
+ *           base62-encoded as a single big-endian unsigned integer over
+ *           ceil(count*21/8) bytes
  *
- * Resulting string lengths:
- *   1 widget  ->  5 chars
- *   2 widgets ->  8 chars
- *   3 widgets -> 12 chars
- *   4 widgets -> 15 chars
- *   6 widgets -> 22 chars
+ * The version+count prefix gives the decoder an unambiguous byte length,
+ * which the bigint round-trip cannot recover on its own (leading zeros
+ * are not preserved across base62 conversion).
+ *
+ * Resulting string lengths (incl. 2-char prefix):
+ *   1 widget  ->   6 chars
+ *   2 widgets ->  10 chars
+ *   3 widgets ->  13 chars
+ *   4 widgets ->  17 chars
+ *   8 widgets ->  31 chars
  */
 
 import type { GridLayoutItem } from "$lib/types/grid-layout";
@@ -46,10 +54,8 @@ const typeToId = new Map<string, number>(
 const idToType = WIDGET_TYPES;
 
 const FORMAT_VERSION = 0;
-const MAX_VERSION_BITS = 3;
-const MAX_COUNT_BITS = 3;
-const HEADER_BITS = MAX_VERSION_BITS + MAX_COUNT_BITS; // 6
 const BITS_PER_WIDGET = 21; // 5 + 4 + 4 + 4 + 4
+const MAX_WIDGETS = 8;
 
 // -- Base62 ------------------------------------------------------------
 const BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -132,14 +138,11 @@ class BitReader {
 // -- Public API --------------------------------------------------------
 
 export function encodeLayout(items: GridLayoutItem[]): string {
-    if (items.length === 0 || items.length > 8) {
-        throw new Error(`Widget count must be 1-8, got ${items.length}`);
+    if (items.length === 0 || items.length > MAX_WIDGETS) {
+        throw new Error(`Widget count must be 1-${MAX_WIDGETS}, got ${items.length}`);
     }
 
     const writer = new BitWriter();
-    writer.write(FORMAT_VERSION, MAX_VERSION_BITS);
-    writer.write(items.length - 1, MAX_COUNT_BITS); // 0-7 -> 1-8
-
     for (const item of items) {
         const tid = typeToId.get(item.id);
         if (tid === undefined) {
@@ -152,39 +155,36 @@ export function encodeLayout(items: GridLayoutItem[]): string {
         writer.write(item.h - 1, 4);    // 1-12 -> 0-11
     }
 
-    return bytesToBase62(writer.toBytes());
+    // Two-char prefix gives the decoder an unambiguous byte length:
+    // base62 of a bigint silently drops leading zeros, so the data length
+    // cannot be recovered from the encoded string alone.
+    return BASE62[FORMAT_VERSION] + BASE62[items.length] + bytesToBase62(writer.toBytes());
 }
 
 export function decodeLayout(code: string): GridLayoutItem[] {
-    // Calculate expected byte length from string
-    // We need to try decoding to find the count, but we know the max possible bytes
-    const totalBitsMax = HEADER_BITS + 8 * BITS_PER_WIDGET;
-    const maxBytes = Math.ceil(totalBitsMax / 8);
-    const bytes = base62ToBytes(code, maxBytes);
-
-    const reader = new BitReader(bytes);
-    const version = reader.read(MAX_VERSION_BITS);
+    if (code.length < 2) {
+        throw new Error("layout code too short");
+    }
+    const version = BASE62.indexOf(code[0]);
     if (version !== FORMAT_VERSION) {
-        throw new Error(`Unsupported layout format version: ${version}`);
+        throw new Error(`unsupported layout format version: ${version}`);
+    }
+    const count = BASE62.indexOf(code[1]);
+    if (count < 1 || count > MAX_WIDGETS) {
+        throw new Error(`invalid widget count: ${count}`);
     }
 
-    const count = reader.read(MAX_COUNT_BITS) + 1;
-
-    // Re-decode with exact byte length for precision
-    const exactBits = HEADER_BITS + count * BITS_PER_WIDGET;
-    const exactBytes = Math.ceil(exactBits / 8);
-    const exactData = base62ToBytes(code, exactBytes);
-    const exactReader = new BitReader(exactData);
-    exactReader.read(MAX_VERSION_BITS); // skip version
-    exactReader.read(MAX_COUNT_BITS);   // skip count
+    const dataBytes = Math.ceil((count * BITS_PER_WIDGET) / 8);
+    const bytes = base62ToBytes(code.slice(2), dataBytes);
+    const reader = new BitReader(bytes);
 
     const items: GridLayoutItem[] = [];
     for (let i = 0; i < count; i++) {
-        const tid = exactReader.read(5);
-        const x = exactReader.read(4);
-        const y = exactReader.read(4);
-        const w = exactReader.read(4) + 1;
-        const h = exactReader.read(4) + 1;
+        const tid = reader.read(5);
+        const x = reader.read(4);
+        const y = reader.read(4);
+        const w = reader.read(4) + 1;
+        const h = reader.read(4) + 1;
 
         if (tid >= idToType.length) {
             throw new Error(`Unknown widget type ID: ${tid}`);
