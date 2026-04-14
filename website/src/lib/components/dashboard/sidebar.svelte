@@ -8,7 +8,6 @@
     import Terminal from "@lucide/svelte/icons/terminal";
     import ShieldBan from "@lucide/svelte/icons/shield-ban";
     import Settings from "@lucide/svelte/icons/settings";
-    import Shield from "@lucide/svelte/icons/shield";
     import PanelLeftClose from "@lucide/svelte/icons/panel-left-close";
     import PanelLeftOpen from "@lucide/svelte/icons/panel-left-open";
     import LogOut from "@lucide/svelte/icons/log-out";
@@ -22,12 +21,11 @@
     import Share2 from "@lucide/svelte/icons/share-2";
     import ClipboardCheck from "@lucide/svelte/icons/clipboard-check";
     import ServerSwitcher from "./server-switcher.svelte";
-    import GraduationCap from "@lucide/svelte/icons/graduation-cap";
     import { dashboardState } from "$lib/dashboard-state.svelte";
     import { widgetRegistry } from "$lib/widget-registry";
     import { encodeLayout } from "$lib/layout-codec";
     import { authQueryOptions, logout } from "$lib/api/auth";
-    import { canGlobal, canServer } from "$lib/permissions.svelte";
+    import { canServer } from "$lib/permissions.svelte";
     import { serverState } from "$lib/server-state.svelte";
     import { createQuery } from "@tanstack/svelte-query";
     import { isActive } from "sv-router/generated";
@@ -95,14 +93,13 @@
     const authQuery = createQuery(() => authQueryOptions());
 
     const user = $derived(authQuery.data);
-    const isOwner = $derived(user?.isOwner ?? false);
     const currentServerId = $derived(serverState.selectedId);
 
     const navItems = $derived(
         allNavItems.filter((item) => canServer(user, currentServerId, item.resource, "read")),
     );
-    const canViewUsers = $derived(canGlobal(user, "users", "read"));
-    const canViewRoles = $derived(canGlobal(user, "roles", "read"));
+
+    const isSettings = $derived(isActive.startsWith("/dashboard/settings"));
 </script>
 
 <aside
@@ -229,68 +226,6 @@
         </div>
     {/if}
 
-    <!-- Panel section (permission-based) -->
-    {#if canViewUsers || canViewRoles}
-        <div class="shrink-0 {collapsed ? 'px-1.5' : 'px-2'} pb-1">
-            <div class="{collapsed ? '' : 'mx-0.5'} mb-2 h-px bg-border/50"></div>
-            {#if !collapsed}
-                <p class="mb-1.5 px-2.5 text-[10px] font-semibold tracking-widest text-muted-foreground/40 uppercase">
-                    Panel
-                </p>
-            {/if}
-            {#if canViewUsers}
-                {@const isUsersPage = isActive("/dashboard/users")}
-                <a
-                    href="/dashboard/users"
-                    data-view-transition
-                    class="group flex items-center rounded-md transition-all duration-150
-                        {collapsed ? 'mb-1 justify-center p-2' : 'mb-0.5 gap-2.5 px-2.5 py-[7px]'}
-                        {isUsersPage
-                            ? 'bg-primary/12 text-primary'
-                            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'}"
-                    title={collapsed ? "Users" : undefined}
-                >
-                    <Users
-                        size={collapsed ? 17 : 15}
-                        strokeWidth={isUsersPage ? 2.2 : 1.8}
-                        class="shrink-0 {isUsersPage ? 'text-primary' : 'text-muted-foreground/60 group-hover:text-foreground/70'}"
-                    />
-                    {#if !collapsed}
-                        <span class="text-[12.5px] font-medium {isUsersPage ? 'font-semibold' : ''}">Users</span>
-                        {#if isUsersPage}
-                            <div class="ml-auto h-1 w-1 rounded-full bg-primary"></div>
-                        {/if}
-                    {/if}
-                </a>
-            {/if}
-            {#if canViewRoles}
-                {@const isRolesPage = isActive("/dashboard/roles")}
-                <a
-                    href="/dashboard/roles"
-                    data-view-transition
-                    class="group flex items-center rounded-md transition-all duration-150
-                        {collapsed ? 'mb-1 justify-center p-2' : 'mb-0.5 gap-2.5 px-2.5 py-[7px]'}
-                        {isRolesPage
-                            ? 'bg-primary/12 text-primary'
-                            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'}"
-                    title={collapsed ? "Roles" : undefined}
-                >
-                    <Shield
-                        size={collapsed ? 17 : 15}
-                        strokeWidth={isRolesPage ? 2.2 : 1.8}
-                        class="shrink-0 {isRolesPage ? 'text-primary' : 'text-muted-foreground/60 group-hover:text-foreground/70'}"
-                    />
-                    {#if !collapsed}
-                        <span class="text-[12.5px] font-medium {isRolesPage ? 'font-semibold' : ''}">Roles</span>
-                        {#if isRolesPage}
-                            <div class="ml-auto h-1 w-1 rounded-full bg-primary"></div>
-                        {/if}
-                    {/if}
-                </a>
-            {/if}
-        </div>
-    {/if}
-
     <!-- Bottom -->
     <div class="shrink-0 {collapsed ? 'px-1.5' : 'px-2'} pb-2">
         <!-- Edit + Share -->
@@ -361,72 +296,33 @@
         {/if}
 
         <div class="mb-1 {collapsed ? '' : 'mx-0.5'} h-px bg-border/50"></div>
-        <!-- Master Actions -->
-        {#if isOwner}
-            <a
-                href="/dashboard/master"
-                data-view-transition
-                class="group flex items-center rounded-md transition-all duration-150
-                    {collapsed
-                    ? 'mb-1 justify-center p-2'
-                    : 'mb-0.5 gap-2.5 px-2.5 py-1.75'}                
-                    {isActive('/dashboard/master')
-                    ? 'bg-primary/12 text-primary'
-                    : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'}"
-                title={collapsed ? "Master Actions" : undefined}
-            >
-                <GraduationCap
-                    size={collapsed ? 17 : 15}
-                    strokeWidth={isActive("/dashboard/master") ? 2.2 : 1.8}
-                    class="shrink-0 {isActive('/dashboard/master')
-                        ? 'text-primary'
-                        : 'text-muted-foreground/60 group-hover:text-foreground/70'}"
-                />
-                {#if !collapsed}
-                    <span
-                        class="text-[12.5px] font-medium {isActive(
-                            '/dashboard/master',
-                        )
-                            ? 'font-semibold'
-                            : ''}">Master Actions</span
-                    >
-                    {#if isActive("/dashboard/master")}
-                        <div
-                            class="ml-auto h-1 w-1 rounded-full bg-primary"
-                        ></div>
-                    {/if}
-                {/if}
-            </a>
-        {/if}
-        <!-- Account Settings -->
+        <!-- Settings (self + panel config, nested tabs) -->
         <a
             href="/dashboard/settings"
             data-view-transition
             class="group flex items-center rounded-md transition-all duration-150
                 {collapsed
                 ? 'mb-1 justify-center p-2'
-                : 'mb-0.5 gap-2.5 px-2.5 py-1.75'}                
-                {isActive('/dashboard/settings')
+                : 'mb-0.5 gap-2.5 px-2.5 py-1.75'}
+                {isSettings
                 ? 'bg-primary/12 text-primary'
                 : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'}"
-            title={collapsed ? "Account Settings" : undefined}
+            title={collapsed ? "Settings" : undefined}
         >
             <Settings
                 size={collapsed ? 17 : 15}
-                strokeWidth={isActive("/dashboard/settings") ? 2.2 : 1.8}
-                class="shrink-0 {isActive('/dashboard/settings')
+                strokeWidth={isSettings ? 2.2 : 1.8}
+                class="shrink-0 {isSettings
                     ? 'text-primary'
                     : 'text-muted-foreground/60 group-hover:text-foreground/70'}"
             />
             {#if !collapsed}
                 <span
-                    class="text-[12.5px] font-medium {isActive(
-                        '/dashboard/settings',
-                    )
+                    class="text-[12.5px] font-medium {isSettings
                         ? 'font-semibold'
-                        : ''}">Account Settings</span
+                        : ''}">Settings</span
                 >
-                {#if isActive("/dashboard/settings")}
+                {#if isSettings}
                     <div class="ml-auto h-1 w-1 rounded-full bg-primary"></div>
                 {/if}
             {/if}
