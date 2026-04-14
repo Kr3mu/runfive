@@ -36,6 +36,7 @@ func Connect() (*gorm.DB, error) {
 		&models.Invite{},
 		&models.Role{},
 		&models.UserServerRole{},
+		&models.UserPreference{},
 	)
 	if err != nil {
 		return nil, err

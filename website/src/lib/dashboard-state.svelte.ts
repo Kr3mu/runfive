@@ -1,15 +1,19 @@
-/** Shared dashboard state — editing mode, layout management. */
+/** Shared dashboard state — editing mode, layout management.
+ *
+ * The widget layout is persisted per-user via the generic preference store
+ * (see $lib/preferences). This module exposes a domain API on top of it:
+ * edit toggle, revision counter (to force GridStack re-init on add/remove),
+ * and named mutations.
+ */
 
 import type { GridLayoutItem } from "$lib/types/grid-layout";
 import { createWidgetItem } from "$lib/widget-registry";
+import { createPreferenceStore } from "$lib/preferences/store.svelte";
+import { dashboardLayoutPref } from "$lib/preferences/registry";
 
-const DEFAULT_LAYOUT: GridLayoutItem[] = [
-    { id: "console", x: 0, y: 0, w: 7, h: 6, minW: 4, minH: 3 },
-    { id: "players", x: 7, y: 0, w: 5, h: 6, minW: 3, minH: 3 },
-];
+const layoutStore = createPreferenceStore(dashboardLayoutPref);
 
 let editingDashboard = $state(false);
-let layout = $state<GridLayoutItem[]>([...DEFAULT_LAYOUT]);
 
 /** Incremented on add/remove to force GridStack re-init */
 let revision = $state(0);
@@ -26,37 +30,50 @@ export const dashboardState = {
     },
 
     get layout(): GridLayoutItem[] {
-        return layout;
+        return layoutStore.value;
     },
     set layout(v: GridLayoutItem[]) {
-        layout = v;
+        layoutStore.set(v);
     },
 
     get activeWidgetIds(): string[] {
-        return layout.map((w) => w.id);
+        return layoutStore.value.map((w) => w.id);
     },
 
     get revision(): number {
         return revision;
     },
 
+    get isLoading(): boolean {
+        return layoutStore.isLoading;
+    },
+
+    /** Load the layout for the given user from the backend. */
+    async hydrate(userId: number): Promise<void> {
+        await layoutStore.hydrate(userId);
+        // Force GridStack to re-init with the freshly loaded layout — its
+        // internal DOM was built from whatever state existed at mount time.
+        revision++;
+    },
+
     addWidget(id: string): void {
-        if (layout.some((w) => w.id === id)) return;
+        const current = layoutStore.value;
+        if (current.some((w) => w.id === id)) return;
         const item = createWidgetItem(id);
         if (!item) return;
         item.x = 0;
         item.y = 0;
-        layout = [...layout, item];
+        layoutStore.set([...current, item]);
         revision++;
     },
 
     removeWidget(id: string): void {
-        layout = layout.filter((w) => w.id !== id);
+        layoutStore.set(layoutStore.value.filter((w) => w.id !== id));
         revision++;
     },
 
     resetLayout(): void {
-        layout = [...DEFAULT_LAYOUT];
+        void layoutStore.reset();
         revision++;
     },
 };

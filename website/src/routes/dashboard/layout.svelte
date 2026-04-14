@@ -2,11 +2,23 @@
     import type { Snippet } from "svelte";
     import Sidebar from "$lib/components/dashboard/sidebar.svelte";
     import { dashboardState } from "$lib/dashboard-state.svelte";
+    import { createQuery } from "@tanstack/svelte-query";
+    import { authQueryOptions } from "$lib/api/auth";
     import CircleAlert from "@lucide/svelte/icons/circle-alert";
     import X from "@lucide/svelte/icons/x";
 
     let { children }: { children: Snippet } = $props();
     let sidebarCollapsed = $state(false);
+
+    const authQuery = createQuery(() => authQueryOptions());
+    let hydratedFor: number | null = null;
+    $effect(() => {
+        const uid = authQuery.data?.id;
+        if (uid !== undefined && uid !== hydratedFor) {
+            hydratedFor = uid;
+            void dashboardState.hydrate(uid);
+        }
+    });
 
     const dashboardErrors: Record<string, string> = {
         link_failed: "Failed to link your Cfx.re account. Please try again.",

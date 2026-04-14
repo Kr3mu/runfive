@@ -100,4 +100,11 @@ func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *a
 	// Permission schema endpoint (any authenticated user)
 	permGroup := r.Group("/permissions", auth.RequireAuth(sm, db), auth.LoadPermissions(db))
 	permGroup.Get("/schema", PermissionSchema)
+
+	// Per-user preferences (any authenticated user, scoped to their own row)
+	prefHandler := NewPreferenceHandler(db)
+	prefGroup := r.Group("/preferences", auth.RequireAuth(sm, db))
+	prefGroup.Get("/:key", prefHandler.Get)
+	prefGroup.Put("/:key", prefHandler.Put)
+	prefGroup.Delete("/:key", prefHandler.Delete)
 }

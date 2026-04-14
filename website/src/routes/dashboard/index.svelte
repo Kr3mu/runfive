@@ -26,8 +26,8 @@
     const servers = $derived(serversQuery.data ?? []);
     const canCreateServers = $derived(canGlobal(currentUser, "servers", "create"));
 
-    function handleLayoutChange(_items: GridLayoutItem[]): void {
-        // TODO: persist to backend/localStorage
+    function handleLayoutChange(items: GridLayoutItem[]): void {
+        dashboardState.layout = items;
     }
 
     function handleRemove(id: string): void {
@@ -62,7 +62,7 @@
 {:else}
     {#key dashboardState.revision}
         <GridStack
-            bind:items={dashboardState.layout}
+            items={dashboardState.layout}
             columns={12}
             cellHeight={80}
             margin={4}
