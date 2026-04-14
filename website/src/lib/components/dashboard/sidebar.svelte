@@ -34,16 +34,6 @@
 
     let isLoggingOut = $state(false);
 
-    let pathname = $state(window.location.pathname);
-    $effect((): (() => void) => {
-        const update = (): void => { pathname = window.location.pathname; };
-        window.addEventListener("popstate", update);
-        const observer = new MutationObserver(update);
-        observer.observe(document.querySelector("head title") ?? document.head, { childList: true, subtree: true, characterData: true });
-        return (): void => { window.removeEventListener("popstate", update); observer.disconnect(); };
-    });
-    const isUsersPage = $derived(pathname.startsWith("/dashboard/users"));
-
     function handleLogout(): void {
         if (isLoggingOut) return;
         isLoggingOut = true;
@@ -249,6 +239,7 @@
                 </p>
             {/if}
             {#if canViewUsers}
+                {@const isUsersPage = isActive("/dashboard/users")}
                 <a
                     href="/dashboard/users"
                     data-view-transition
@@ -273,7 +264,7 @@
                 </a>
             {/if}
             {#if canViewRoles}
-                {@const isRolesPage = pathname.startsWith("/dashboard/roles")}
+                {@const isRolesPage = isActive("/dashboard/roles")}
                 <a
                     href="/dashboard/roles"
                     data-view-transition
