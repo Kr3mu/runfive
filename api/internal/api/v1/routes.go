@@ -42,6 +42,7 @@ func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *a
 	protected.Get("/me", authHandler.Me)
 	protected.Get("/sessions", authHandler.Sessions)
 	protected.Delete("/sessions/:id", authHandler.RevokeSession)
+	protected.Delete("/discord", authHandler.UnlinkDiscord)
 
 	// Master-only endpoints (owner-only, not permission-based)
 	master := protected.Group("/master", auth.RequireMaster)

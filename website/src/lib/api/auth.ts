@@ -268,3 +268,17 @@ export async function revokeSession(sessionId: number): Promise<void> {
     throw new Error(`Revoke session failed: ${res.status}`);
   }
 }
+
+/**
+ * Unlinks the currently authenticated user's Discord account.
+ *
+ * @throws Error if unlinking fails
+ */
+export async function unlinkDiscord(): Promise<void> {
+  const res: Response = await fetch('/v1/auth/discord', {
+    method: 'DELETE',
+  });
+  if (!res.ok && res.status !== 204) {
+    throw new Error(`Unlink Discord failed: ${res.status}`);
+  }
+}

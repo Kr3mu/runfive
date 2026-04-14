@@ -1,10 +1,12 @@
 <script lang="ts">
     import { createQuery } from "@tanstack/svelte-query";
+    import { useQueryClient } from "@tanstack/svelte-query";
     import {
         authQueryOptions,
         fetchDiscordStatus,
         fetchSessions,
         revokeSession,
+        unlinkDiscord,
         type SessionEntry,
     } from "$lib/api/auth";
     import Cfxre from "$lib/components/icons/cfxre.svelte";
@@ -17,12 +19,14 @@
     import { toast } from "svelte-sonner";
 
     const authQuery = createQuery(() => authQueryOptions());
+    const queryClient = useQueryClient();
     const user = $derived(authQuery.data);
 
     let sessions = $state<SessionEntry[]>([]);
     let isLoadingSessions = $state(true);
     let revokingId = $state<number | null>(null);
     let discordConfigured = $state(false);
+    let isUnlinkingDiscord = $state(false);
 
     $effect((): void => {
         fetchSessions()
@@ -49,6 +53,18 @@
 
     function handleLinkDiscord(): void {
         window.location.href = "/v1/auth/discord";
+    }
+
+    async function handleUnlinkDiscord(): Promise<void> {
+        isUnlinkingDiscord = true;
+        try {
+            await unlinkDiscord();
+            await queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
+            toast.success("Discord account disconnected");
+        } catch {
+            toast.error("Failed to disconnect Discord");
+        }
+        isUnlinkingDiscord = false;
     }
 
     async function handleRevoke(id: number): Promise<void> {
@@ -167,12 +183,19 @@
                         </div>
                     </div>
                     {#if user.providers.discord}
-                        <span
-                            class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-500"
+                        <button
+                            disabled={isUnlinkingDiscord}
+                            onclick={handleUnlinkDiscord}
+                            class="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                            title="Disconnect Discord"
                         >
-                            <LinkIcon size={11} />
-                            Linked
-                        </span>
+                            {#if isUnlinkingDiscord}
+                                <LoaderCircle size={12} class="animate-spin" />
+                            {:else}
+                                <Trash2 size={12} />
+                            {/if}
+                            Disconnect
+                        </button>
                     {:else}
                         <button
                             disabled={!discordConfigured}

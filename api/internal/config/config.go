@@ -8,7 +8,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 
@@ -47,8 +46,7 @@ func LoadConfig() (*Config, error) {
 		DiscordClientID:     envOrDefault("DISCORD_CLIENT_ID", ""),
 		DiscordClientSecret: envOrDefault("DISCORD_CLIENT_SECRET", ""),
 	}
-
-	log.Print(cfg.DiscordClientID, cfg.DiscordClientSecret)
+	cfg.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
 
 	sessionKey, err := loadOrGenerateKey("SESSION_ENCRYPT_KEY", "session_encrypt_key")
 	if err != nil {

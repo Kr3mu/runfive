@@ -461,6 +461,28 @@ func (h *AuthHandler) DiscordCallback(c fiber.Ctx) error {
 	return c.Redirect().To("/dashboard")
 }
 
+// UnlinkDiscord removes the linked Discord account from the authenticated user.
+//
+// DELETE /v1/auth/discord
+func (h *AuthHandler) UnlinkDiscord(c fiber.Ctx) error {
+	user := auth.GetUser(c)
+	if user == nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "not authenticated")
+	}
+
+	result := h.db.Model(&models.User{}).Where("id = ?", user.ID).Updates(map[string]interface{}{
+		"discord_id":           nil,
+		"discord_username":     nil,
+		"discord_avatar":       nil,
+		"discord_access_token": nil,
+	})
+	if result.Error != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to unlink discord account")
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
 // buildMeResponse converts a User model and resolved permissions into the API response DTO.
 func buildMeResponse(user *models.User, perms *permissions.ResolvedPermissions) models.MeResponse {
 	resp := models.MeResponse{
