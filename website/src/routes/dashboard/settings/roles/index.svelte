@@ -14,7 +14,6 @@
     import { canGlobal } from '$lib/permissions.svelte';
     import { toast } from 'svelte-sonner';
     import Shield from '@lucide/svelte/icons/shield';
-    import ShieldAlert from '@lucide/svelte/icons/shield-alert';
     import Plus from '@lucide/svelte/icons/plus';
     import Pencil from '@lucide/svelte/icons/pencil';
     import Trash2 from '@lucide/svelte/icons/trash-2';
@@ -219,180 +218,149 @@
     }
 </script>
 
-{#if !canRead && !authQuery.isLoading}
-    <div class="flex h-full items-center justify-center">
-        <div class="text-center">
-            <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-destructive/10">
-                <ShieldAlert size={24} class="text-destructive" />
-            </div>
-            <p class="font-heading text-lg font-semibold text-foreground">Access Denied</p>
-            <p class="mt-1 text-sm text-muted-foreground">You don't have permission to manage roles.</p>
-        </div>
-    </div>
-{:else}
-    <div class="flex h-full flex-col overflow-y-auto">
-        <div class="mx-auto w-full max-w-6xl px-6 py-8">
-            <!-- Header -->
-            <div class="roles-reveal mb-8">
-                <h1 class="mb-1 font-heading text-lg font-semibold text-foreground">Roles</h1>
-                <p class="text-sm text-muted-foreground">Define permission sets and assign them to users per server</p>
+{#if canRead}
+    <section class="tab-reveal">
+        <h2 class="mb-3 flex items-center gap-2 text-xs font-semibold tracking-widest text-muted-foreground/60 uppercase">
+            <Shield size={14} />
+            Permission Roles
+        </h2>
+
+        <div class="rounded-lg border border-border bg-card">
+            <div class="flex items-center justify-between border-b border-border/50 px-4 py-2.5">
+                <span class="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] font-bold text-primary">
+                    {roles.length} {roles.length === 1 ? 'role' : 'roles'}
+                </span>
+                {#if canCreateRole}
+                    <button
+                        onclick={openCreateForm}
+                        disabled={showCreateForm}
+                        class="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-50"
+                    >
+                        <Plus size={13} />
+                        New Role
+                    </button>
+                {/if}
             </div>
 
-            <!-- Roles Table -->
-            <section class="roles-reveal delay-1">
-                <h2 class="mb-3 flex items-center gap-2 text-xs font-semibold tracking-widest text-muted-foreground/60 uppercase">
-                    <Shield size={14} />
-                    Permission Roles
-                </h2>
-
-                <div class="rounded-lg border border-border bg-card">
-                    <!-- Toolbar -->
-                    <div class="flex items-center justify-between border-b border-border/50 px-4 py-2.5">
-                        <span class="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] font-bold text-primary">
-                            {roles.length} {roles.length === 1 ? 'role' : 'roles'}
-                        </span>
-                        {#if canCreateRole}
+            {#if isLoading}
+                <div class="flex items-center justify-center py-12">
+                    <LoaderCircle size={18} class="animate-spin text-muted-foreground" />
+                </div>
+            {:else}
+                {#if showCreateForm && schema}
+                    <div class="border-b border-primary/20 bg-primary/[0.02]">
+                        {@render roleForm(
+                            newRoleName, (v: string) => (newRoleName = v),
+                            newRoleDescription, (v: string) => (newRoleDescription = v),
+                            newRoleColor, (v: string) => (newRoleColor = v),
+                            newGlobalPerms, newServerPerms, schema, true,
+                        )}
+                        <div class="flex items-center justify-end gap-2 border-t border-border/30 px-4 py-3">
+                            <button onclick={() => (showCreateForm = false)} class="rounded-md px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground">Cancel</button>
                             <button
-                                onclick={openCreateForm}
-                                disabled={showCreateForm}
-                                class="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90 active:opacity-80 disabled:opacity-50"
+                                onclick={handleCreate}
+                                disabled={isCreating || !newRoleName.trim()}
+                                class="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
                             >
-                                <Plus size={13} />
-                                New Role
+                                {#if isCreating}<LoaderCircle size={12} class="animate-spin" />{:else}<Check size={12} />{/if}
+                                Create Role
                             </button>
-                        {/if}
-                    </div>
-
-                    {#if isLoading}
-                        <div class="flex items-center justify-center py-12">
-                            <LoaderCircle size={18} class="animate-spin text-muted-foreground" />
                         </div>
-                    {:else}
-                        <!-- Create Form -->
-                        {#if showCreateForm && schema}
-                            <div class="border-b border-primary/20 bg-primary/[0.02]">
-                                {@render roleForm(
-                                    newRoleName, (v: string) => (newRoleName = v),
-                                    newRoleDescription, (v: string) => (newRoleDescription = v),
-                                    newRoleColor, (v: string) => (newRoleColor = v),
-                                    newGlobalPerms, newServerPerms, schema, true,
-                                )}
-                                <div class="flex items-center justify-end gap-2 border-t border-border/30 px-4 py-3">
-                                    <button onclick={() => (showCreateForm = false)} class="rounded-md px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground">Cancel</button>
-                                    <button
-                                        onclick={handleCreate}
-                                        disabled={isCreating || !newRoleName.trim()}
-                                        class="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-                                    >
-                                        {#if isCreating}<LoaderCircle size={12} class="animate-spin" />{:else}<Check size={12} />{/if}
-                                        Create Role
-                                    </button>
+                    </div>
+                {/if}
+
+                {#if roles.length === 0 && !showCreateForm}
+                    <div class="px-4 py-12 text-center text-sm text-muted-foreground/40">No roles defined yet.</div>
+                {:else}
+                    {#each roles as role (role.id)}
+                        {@const isExpanded = expandedRoleId === role.id}
+                        {@const isEditing = editingRoleId === role.id}
+                        <div class="border-b border-border/20 last:border-0 {actionInProgress === role.id ? 'opacity-50 pointer-events-none' : ''}">
+                            <div class="group flex items-center px-4 py-3 transition-colors hover:bg-muted/20">
+                                <button onclick={() => toggleExpand(role.id)} class="mr-2 rounded p-0.5 text-muted-foreground/25 transition-colors hover:text-muted-foreground/60">
+                                    {#if isExpanded}<ChevronDown size={14} />{:else}<ChevronRight size={14} />{/if}
+                                </button>
+
+                                <button onclick={() => toggleExpand(role.id)} class="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+                                    <div class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color: {role.color}"></div>
+                                    <span class="truncate text-[13px] font-medium text-foreground">{role.name}</span>
+                                    {#if role.isSystem}
+                                        <span class="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground">System</span>
+                                    {/if}
+                                    {#if role.description}
+                                        <span class="hidden truncate text-[11px] text-muted-foreground/35 xl:inline">{role.description}</span>
+                                    {/if}
+                                </button>
+
+                                <div class="mr-3 hidden items-center gap-5 sm:flex">
+                                    <span class="flex items-center gap-1.5 text-[11px] text-muted-foreground/35" title="{role.assignedUsers} user(s) assigned">
+                                        <Users size={11} />
+                                        <span class="tabular-nums">{role.assignedUsers}</span>
+                                    </span>
+                                    <span class="text-[11px] tabular-nums text-muted-foreground/35" title="Permissions granted">
+                                        {countGranted(role.globalPerms) + countGranted(role.serverPerms)} perms
+                                    </span>
                                 </div>
-                            </div>
-                        {/if}
 
-                        <!-- Role List -->
-                        {#if roles.length === 0 && !showCreateForm}
-                            <div class="px-4 py-12 text-center text-sm text-muted-foreground/40">No roles defined yet.</div>
-                        {:else}
-                            {#each roles as role (role.id)}
-                                {@const isExpanded = expandedRoleId === role.id}
-                                {@const isEditing = editingRoleId === role.id}
-                                <div class="border-b border-border/20 last:border-0 {actionInProgress === role.id ? 'opacity-50 pointer-events-none' : ''}">
-                                    <!-- Row -->
-                                    <div class="group flex items-center px-4 py-3 transition-colors hover:bg-muted/20">
-                                        <!-- Expand toggle -->
-                                        <button onclick={() => toggleExpand(role.id)} class="mr-2 rounded p-0.5 text-muted-foreground/25 transition-colors hover:text-muted-foreground/60">
-                                            {#if isExpanded}<ChevronDown size={14} />{:else}<ChevronRight size={14} />{/if}
-                                        </button>
-
-                                        <!-- Color + Name (clickable to expand) -->
-                                        <button onclick={() => toggleExpand(role.id)} class="flex min-w-0 flex-1 items-center gap-2.5 text-left">
-                                            <div class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color: {role.color}"></div>
-                                            <span class="truncate text-[13px] font-medium text-foreground">{role.name}</span>
-                                            {#if role.isSystem}
-                                                <span class="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground">System</span>
-                                            {/if}
-                                            {#if role.description}
-                                                <span class="hidden truncate text-[11px] text-muted-foreground/35 xl:inline">{role.description}</span>
-                                            {/if}
-                                        </button>
-
-                                        <!-- Stats -->
-                                        <div class="mr-3 hidden items-center gap-5 sm:flex">
-                                            <span class="flex items-center gap-1.5 text-[11px] text-muted-foreground/35" title="{role.assignedUsers} user(s) assigned">
-                                                <Users size={11} />
-                                                <span class="tabular-nums">{role.assignedUsers}</span>
-                                            </span>
-                                            <span class="text-[11px] tabular-nums text-muted-foreground/35" title="Permissions granted">
-                                                {countGranted(role.globalPerms) + countGranted(role.serverPerms)} perms
-                                            </span>
-                                        </div>
-
-                                        <!-- Actions -->
-                                        <div class="flex items-center gap-0.5">
-                                            {#if deleteConfirm === role.id}
-                                                <span class="mr-1 text-[11px] text-muted-foreground">Delete?</span>
-                                                <button onclick={() => handleDelete(role.id)} class="rounded-md px-2 py-0.5 text-[11px] font-medium bg-destructive/10 text-destructive hover:bg-destructive/20">Confirm</button>
-                                                <button onclick={() => (deleteConfirm = null)} class="rounded-md px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground">Cancel</button>
-                                            {:else}
-                                                {#if canUpdate}
-                                                    <button onclick={() => startEdit(role)} class="rounded-md p-1.5 text-muted-foreground/25 transition-colors hover:bg-muted/50 hover:text-foreground opacity-0 group-hover:opacity-100" title="Edit">
-                                                        <Pencil size={13} />
-                                                    </button>
-                                                {/if}
-                                                {#if canDeleteRole && !role.isSystem}
-                                                    <button onclick={() => (deleteConfirm = role.id)} class="rounded-md p-1.5 text-muted-foreground/25 transition-colors hover:bg-destructive/10 hover:text-destructive opacity-0 group-hover:opacity-100" title="Delete">
-                                                        <Trash2 size={13} />
-                                                    </button>
-                                                {/if}
-                                            {/if}
-                                        </div>
-                                    </div>
-
-                                    <!-- Expanded Panel -->
-                                    {#if isExpanded && schema}
-                                        <div class="border-t border-border/15 bg-muted/[0.04] px-4 pb-4 pt-3">
-                                            {#if isEditing}
-                                                {@render roleForm(
-                                                    editName, (v: string) => (editName = v),
-                                                    editDescription, (v: string) => (editDescription = v),
-                                                    editColor, (v: string) => (editColor = v),
-                                                    editGlobalPerms, editServerPerms, schema, true,
-                                                    origGlobalPerms, origServerPerms,
-                                                )}
-                                                <div class="mt-4 flex items-center justify-end gap-2">
-                                                    <button onclick={() => (editingRoleId = null)} class="rounded-md px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground">Cancel</button>
-                                                    <button
-                                                        onclick={() => saveEdit(role)}
-                                                        disabled={isSaving}
-                                                        class="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
-                                                    >
-                                                        {#if isSaving}<LoaderCircle size={12} class="animate-spin" />{:else}<Check size={12} />{/if}
-                                                        Save
-                                                    </button>
-                                                </div>
-                                            {:else}
-                                                {#if role.description}
-                                                    <p class="mb-3 text-xs text-muted-foreground/40">{role.description}</p>
-                                                {/if}
-                                                {@render permGrid('Global Permissions', role.globalPerms, schema.global, false)}
-                                                <div class="my-3"></div>
-                                                {@render permGrid('Server Permissions', role.serverPerms, schema.server, false)}
-                                            {/if}
-                                        </div>
+                                <div class="flex items-center gap-0.5">
+                                    {#if deleteConfirm === role.id}
+                                        <span class="mr-1 text-[11px] text-muted-foreground">Delete?</span>
+                                        <button onclick={() => handleDelete(role.id)} class="rounded-md px-2 py-0.5 text-[11px] font-medium bg-destructive/10 text-destructive hover:bg-destructive/20">Confirm</button>
+                                        <button onclick={() => (deleteConfirm = null)} class="rounded-md px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground">Cancel</button>
+                                    {:else}
+                                        {#if canUpdate}
+                                            <button onclick={() => startEdit(role)} class="rounded-md p-1.5 text-muted-foreground/25 transition-colors hover:bg-muted/50 hover:text-foreground opacity-0 group-hover:opacity-100" title="Edit">
+                                                <Pencil size={13} />
+                                            </button>
+                                        {/if}
+                                        {#if canDeleteRole && !role.isSystem}
+                                            <button onclick={() => (deleteConfirm = role.id)} class="rounded-md p-1.5 text-muted-foreground/25 transition-colors hover:bg-destructive/10 hover:text-destructive opacity-0 group-hover:opacity-100" title="Delete">
+                                                <Trash2 size={13} />
+                                            </button>
+                                        {/if}
                                     {/if}
                                 </div>
-                            {/each}
-                        {/if}
-                    {/if}
-                </div>
-            </section>
+                            </div>
+
+                            {#if isExpanded && schema}
+                                <div class="border-t border-border/15 bg-muted/[0.04] px-4 pb-4 pt-3">
+                                    {#if isEditing}
+                                        {@render roleForm(
+                                            editName, (v: string) => (editName = v),
+                                            editDescription, (v: string) => (editDescription = v),
+                                            editColor, (v: string) => (editColor = v),
+                                            editGlobalPerms, editServerPerms, schema, true,
+                                            origGlobalPerms, origServerPerms,
+                                        )}
+                                        <div class="mt-4 flex items-center justify-end gap-2">
+                                            <button onclick={() => (editingRoleId = null)} class="rounded-md px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground">Cancel</button>
+                                            <button
+                                                onclick={() => saveEdit(role)}
+                                                disabled={isSaving}
+                                                class="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                                            >
+                                                {#if isSaving}<LoaderCircle size={12} class="animate-spin" />{:else}<Check size={12} />{/if}
+                                                Save
+                                            </button>
+                                        </div>
+                                    {:else}
+                                        {#if role.description}
+                                            <p class="mb-3 text-xs text-muted-foreground/40">{role.description}</p>
+                                        {/if}
+                                        {@render permGrid('Global Permissions', role.globalPerms, schema.global, false)}
+                                        <div class="my-3"></div>
+                                        {@render permGrid('Server Permissions', role.serverPerms, schema.server, false)}
+                                    {/if}
+                                </div>
+                            {/if}
+                        </div>
+                    {/each}
+                {/if}
+            {/if}
         </div>
-    </div>
+    </section>
 {/if}
 
-<!-- Role form (name, desc, color, permission grids) -->
 {#snippet roleForm(
     name: string, setName: (v: string) => void,
     desc: string, setDesc: (v: string) => void,
@@ -450,7 +418,6 @@
     </div>
 {/snippet}
 
-<!-- Permission Grid Matrix -->
 {#snippet permGrid(
     label: string,
     perms: Record<string, Record<string, boolean>>,
@@ -494,7 +461,6 @@
                     {@const isSubExpanded = expandedSubRows.has(subKey)}
                     {@const allCrudGranted = rs.crud.every((a) => perms[resource]?.[a])}
 
-                    <!-- Main CRUD row -->
                     <tr class="border-t border-border/15 transition-colors {editable ? 'hover:bg-muted/20' : ''}">
                         <td class="px-3 py-1.5">
                             <div class="flex items-center gap-1.5">
@@ -523,7 +489,6 @@
                                     </span>
                                 {/if}
                                 {#if hasSub && !isSubExpanded}
-                                    {@const subGranted = (rs.sub ?? []).filter((a) => perms[resource]?.[a] === true).length}
                                     <span class="rounded bg-muted/60 px-1 py-0.5 text-[9px] tabular-nums text-muted-foreground/30">
                                         +{rs.sub?.length}
                                     </span>
@@ -540,7 +505,6 @@
                         {/each}
                     </tr>
 
-                    <!-- Sub-action rows (expanded) -->
                     {#if hasSub && isSubExpanded}
                         {#each rs.sub ?? [] as subAction}
                             {@const granted = perms[resource]?.[subAction] === true}
@@ -584,7 +548,6 @@
     </div>
 {/snippet}
 
-<!-- Single permission cell (CRUD column) -->
 {#snippet permCell(
     hasAction: boolean,
     granted: boolean,
@@ -629,13 +592,12 @@
 {/snippet}
 
 <style>
-    .roles-reveal {
-        animation: reveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+    .tab-reveal {
+        animation: reveal 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+        animation-delay: 0.12s;
     }
-    .delay-1 { animation-delay: 0.1s; }
-
     @keyframes reveal {
-        from { opacity: 0; transform: translateY(12px); }
+        from { opacity: 0; transform: translateY(8px); }
         to { opacity: 1; transform: translateY(0); }
     }
 </style>
