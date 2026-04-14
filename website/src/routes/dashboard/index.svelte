@@ -64,7 +64,6 @@
         <GridStack
             items={dashboardState.layout}
             columns={12}
-            cellHeight={80}
             margin={4}
             onchange={handleLayoutChange}
         >
