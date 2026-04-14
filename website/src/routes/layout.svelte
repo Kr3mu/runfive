@@ -89,7 +89,7 @@
                         <Github class="h-4 w-4" />
                     </a>
                     <a
-                        href="https://discord.gg"
+                        href="https://discord.gg/APvag5Ze5D"
                         target="_blank"
                         rel="noopener noreferrer"
                         class="text-muted-foreground/40 transition-colors hover:text-foreground"

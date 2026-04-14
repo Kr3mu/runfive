@@ -499,7 +499,7 @@
                 <Github class="h-3 w-3" />
             </a>
             <a
-                href="https://discord.gg"
+                href="https://discord.gg/APvag5Ze5D"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="text-muted-foreground/20 transition-colors hover:text-foreground/60"

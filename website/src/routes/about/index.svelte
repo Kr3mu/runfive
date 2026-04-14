@@ -86,9 +86,8 @@
             >
                 <Github class="h-5 w-5" />
             </a>
-            <!-- TODO: replace with actual Discord invite link -->
             <a
-                href="https://discord.gg"
+                href="https://discord.gg/APvag5Ze5D"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="text-muted-foreground/40 transition-colors hover:text-foreground"
