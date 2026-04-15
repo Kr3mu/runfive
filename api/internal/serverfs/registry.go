@@ -81,6 +81,7 @@ type entry struct {
 type Registry struct {
 	rootDir   string
 	artifacts artifactLookup
+	dec       FieldDecryptor
 
 	mu      sync.RWMutex
 	entries map[string]entry
@@ -88,11 +89,14 @@ type Registry struct {
 
 // NewRegistry creates a registry rooted at rootDir and performs an initial
 // load. Call StartWatcher separately once the caller is ready to consume
-// filesystem events so tests can opt out.
-func NewRegistry(rootDir string, artifacts artifactLookup) (*Registry, error) {
+// filesystem events so tests can opt out. The decryptor is used to render
+// generated server.cfg files containing sensitive values such as the license
+// key; pass nil if no encrypted fields are in use.
+func NewRegistry(rootDir string, artifacts artifactLookup, dec FieldDecryptor) (*Registry, error) {
 	r := &Registry{
 		rootDir:   rootDir,
 		artifacts: artifacts,
+		dec:       dec,
 		entries:   make(map[string]entry),
 	}
 	if err := r.Reload(); err != nil {
@@ -157,6 +161,17 @@ func (r *Registry) Reload() error {
 	r.mu.Lock()
 	r.entries = next
 	r.mu.Unlock()
+
+	for id, e := range next {
+		if e.invalid {
+			continue
+		}
+		serverDir := filepath.Join(r.rootDir, id)
+		if err := writeGeneratedServerCfg(serverDir, e.config, r.dec); err != nil {
+			log.Printf("[serverfs] %s: generate server.cfg: %v", id, err)
+		}
+	}
+
 	return nil
 }
 

@@ -19,7 +19,7 @@ func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *a
 	if err != nil {
 		panic(err)
 	}
-	serverRegistry, err := serverfs.NewRegistry(serversDir, artifactManager)
+	serverRegistry, err := serverfs.NewRegistry(serversDir, artifactManager, fe)
 	if err != nil {
 		panic(err)
 	}
