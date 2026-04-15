@@ -100,6 +100,7 @@
     );
 
     const isSettings = $derived(isActive.startsWith("/dashboard/settings"));
+    const isDashboard = $derived(isActive("/dashboard" as any));
 </script>
 
 <aside
@@ -178,7 +179,7 @@
     </nav>
 
     <!-- Widget Picker (edit mode only) -->
-    {#if dashboardState.editing && availableWidgets.length > 0 && !collapsed}
+    {#if isDashboard && dashboardState.editing && availableWidgets.length > 0 && !collapsed}
         <div class="shrink-0 px-2 pb-2">
             <div class="mx-0.5 mb-2 h-px bg-border/50"></div>
             <p
@@ -211,7 +212,7 @@
         </div>
     {/if}
 
-    {#if dashboardState.editing && availableWidgets.length > 0 && collapsed}
+    {#if isDashboard && dashboardState.editing && availableWidgets.length > 0 && collapsed}
         <div class="shrink-0 px-1.5 pb-2">
             <div class="mb-1 h-px bg-border/50"></div>
             {#each availableWidgets as widget}
@@ -229,6 +230,7 @@
     <!-- Bottom -->
     <div class="shrink-0 {collapsed ? 'px-1.5' : 'px-2'} pb-2">
         <!-- Edit + Share -->
+        {#if isDashboard}
         <button
             onclick={() => dashboardState.toggle()}
             class="mb-0.5 flex w-full items-center rounded-md transition-all
@@ -293,6 +295,7 @@
                         >{/if}
                 {/if}
             </button>
+        {/if}
         {/if}
 
         <div class="mb-1 {collapsed ? '' : 'mx-0.5'} h-px bg-border/50"></div>
