@@ -103,7 +103,7 @@ func (m *Manager) Start(id string) (models.ServerProcessStatus, error) {
 	args = append(args, "+exec", absConfig)
 
 	//nolint:gosec // executable path and args are derived from application-managed runtime files.
-	cmd := exec.Command(absExecutable, args...)
+	cmd := exec.CommandContext(context.Background(), absExecutable, args...)
 	cmd.Dir = absServerDir
 	cmd.SysProcAttr = newProcessGroupAttr()
 
@@ -446,15 +446,16 @@ func (r *serverRuntime) waitForExit(cmd *exec.Cmd) {
 	r.pid = 0
 	r.updatedAt = time.Now().UTC()
 
-	if stopRequested {
+	switch {
+	case stopRequested:
 		r.status = models.ServerStatusStopped
 		r.exitReason = "stopped by panel"
 		r.exitCode = nil
-	} else if exitCode != 0 {
+	case exitCode != 0:
 		r.status = models.ServerStatusCrashed
 		r.exitReason = waitReason
 		r.exitCode = intPtr(exitCode)
-	} else {
+	default:
 		r.status = models.ServerStatusStopped
 		r.exitReason = waitReason
 		r.exitCode = nil

@@ -43,8 +43,8 @@ type ServerHandler struct {
 }
 
 // NewServerHandler creates a server handler with its dependencies.
-func NewServerHandler(registry serverRegistry, artifacts serverArtifactManager, launcher serverLauncher) *ServerHandler {
-	return &ServerHandler{registry: registry, artifacts: artifacts, launcher: launcher}
+func NewServerHandler(registry serverRegistry, artifacts serverArtifactManager, serverLauncher serverLauncher) *ServerHandler {
+	return &ServerHandler{registry: registry, artifacts: artifacts, launcher: serverLauncher}
 }
 
 // List returns filesystem-discovered servers, filtered by RBAC visibility.
