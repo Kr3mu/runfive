@@ -84,7 +84,7 @@ type Registry struct {
 	dec       FieldDecryptor
 
 	mu      sync.RWMutex
-	entries map[string]entry
+	entries map[string]*entry
 }
 
 // NewRegistry creates a registry rooted at rootDir and performs an initial
@@ -97,7 +97,7 @@ func NewRegistry(rootDir string, artifacts artifactLookup, dec FieldDecryptor) (
 		rootDir:   rootDir,
 		artifacts: artifacts,
 		dec:       dec,
-		entries:   make(map[string]entry),
+		entries:   make(map[string]*entry),
 	}
 	if err := r.Reload(); err != nil {
 		return nil, err
@@ -113,14 +113,14 @@ func (r *Registry) Reload() error {
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			r.mu.Lock()
-			r.entries = make(map[string]entry)
+			r.entries = make(map[string]*entry)
 			r.mu.Unlock()
 			return nil
 		}
 		return fmt.Errorf("read servers dir: %w", err)
 	}
 
-	next := make(map[string]entry, len(dirEntries))
+	next := make(map[string]*entry, len(dirEntries))
 	portOwners := make(map[int]string)
 
 	for _, de := range dirEntries {
@@ -136,7 +136,7 @@ func (r *Registry) Reload() error {
 				continue
 			}
 			log.Printf("[serverfs] %s: %v", id, err)
-			next[id] = entry{id: id, invalid: true, reason: err.Error()}
+			next[id] = &entry{id: id, invalid: true, reason: err.Error()}
 			continue
 		}
 
@@ -144,18 +144,17 @@ func (r *Registry) Reload() error {
 			if other, clash := portOwners[cfg.Network.Port]; clash {
 				reason := fmt.Sprintf("port %d already claimed by %q", cfg.Network.Port, other)
 				log.Printf("[serverfs] %s: %s", id, reason)
-				next[id] = entry{id: id, config: cfg, invalid: true, reason: reason}
+				next[id] = &entry{id: id, config: cfg, invalid: true, reason: reason}
 				if existing, ok := next[other]; ok {
 					existing.invalid = true
 					existing.reason = fmt.Sprintf("port %d also claimed by %q", cfg.Network.Port, id)
-					next[other] = existing
 				}
 				continue
 			}
 			portOwners[cfg.Network.Port] = id
 		}
 
-		next[id] = entry{id: id, config: cfg}
+		next[id] = &entry{id: id, config: cfg}
 	}
 
 	r.mu.Lock()
@@ -167,7 +166,7 @@ func (r *Registry) Reload() error {
 			continue
 		}
 		serverDir := filepath.Join(r.rootDir, id)
-		if err := writeGeneratedServerCfg(serverDir, e.config, r.dec); err != nil {
+		if err := writeGeneratedServerCfg(serverDir, &e.config, r.dec); err != nil {
 			log.Printf("[serverfs] %s: generate server.cfg: %v", id, err)
 		}
 	}
@@ -321,7 +320,7 @@ func (r *Registry) Create(name, artifactVersion string) (models.ManagedServer, e
 	}
 
 	cfg := defaultServerConfig(name, artifactVersion)
-	if err := writeServerConfig(filepath.Join(serverDir, configFilename), cfg); err != nil {
+	if err := writeServerConfig(filepath.Join(serverDir, configFilename), &cfg); err != nil {
 		return models.ManagedServer{}, err
 	}
 
@@ -424,7 +423,7 @@ func readServerConfig(path string) (ServerConfig, error) {
 	return cfg, nil
 }
 
-func writeServerConfig(path string, cfg ServerConfig) error {
+func writeServerConfig(path string, cfg *ServerConfig) error {
 	body, err := toml.Marshal(cfg)
 	if err != nil {
 		return fmt.Errorf("marshal server config: %w", err)
@@ -442,7 +441,7 @@ func writeServerConfig(path string, cfg ServerConfig) error {
 	return nil
 }
 
-func toManagedServer(e entry) models.ManagedServer {
+func toManagedServer(e *entry) models.ManagedServer {
 	return models.ManagedServer{
 		ID:              e.id,
 		Name:            e.config.Name,
