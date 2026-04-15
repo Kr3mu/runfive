@@ -13,6 +13,7 @@ import (
 type serverRegistry interface {
 	List() ([]models.ManagedServer, error)
 	Create(name, artifactVersion string) (models.ManagedServer, error)
+	Reload() error
 }
 
 type serverArtifactManager interface {
@@ -83,4 +84,16 @@ func (h *ServerHandler) Create(c fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(server)
+}
+
+// Reload forces a full rescan of the servers directory, rebuilding the
+// in-memory registry from disk. Intended as a manual fallback when the
+// filesystem watcher is unavailable.
+//
+// POST /v1/admin/reload-servers
+func (h *ServerHandler) Reload(c fiber.Ctx) error {
+	if err := h.registry.Reload(); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	return c.SendStatus(fiber.StatusNoContent)
 }

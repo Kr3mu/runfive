@@ -45,10 +45,6 @@ func main() {
 	flag.Parse()
 	_ = godotenv.Load(".env")
 
-	log.Printf("Data root:     %s", runtimepath.Root())
-	log.Printf("Servers dir:   %s", runtimepath.Resolve("servers"))
-	log.Printf("Artifacts dir: %s", runtimepath.Resolve("artifacts"))
-
 	if err := os.MkdirAll(runtimepath.Root(), 0o750); err != nil {
 		log.Fatalf("Failed to create runtime root %q: %v", runtimepath.Root(), err)
 	}
@@ -61,6 +57,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
+
+	log.Printf("Data root:     %s", runtimepath.Root())
+	log.Printf("Servers dir:   %s", cfg.ServersDir)
+	log.Printf("Artifacts dir: %s", cfg.ArtifactsDir)
 
 	if *listenPort != "" {
 		cfg.Port = *listenPort
@@ -102,6 +102,7 @@ func main() {
 	app := api.New(&appConfig, &api.AppDeps{
 		DB:           db,
 		ArtifactsDir: cfg.ArtifactsDir,
+		ServersDir:   cfg.ServersDir,
 		SM:           sm,
 		Cfx:          cfx,
 		FE:           fe,

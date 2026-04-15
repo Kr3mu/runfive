@@ -18,6 +18,8 @@ type AppDeps struct {
 	DB *gorm.DB
 	// ArtifactsDir is the filesystem root for shared artifact installs.
 	ArtifactsDir string
+	// ServersDir is the filesystem root for panel-managed server.toml configs.
+	ServersDir string
 	// SM is the session manager.
 	SM *auth.SessionManager
 	// Cfx handles Cfx.re authentication.
@@ -59,5 +61,5 @@ func New(appConfig *fiber.Config, deps *AppDeps) *fiber.App {
 
 func setupRoutes(app *fiber.App, deps *AppDeps) {
 	v1Group := app.Group("/v1")
-	v1.RegisterRouter(v1Group, deps.DB, deps.SM, deps.Cfx, deps.FE, deps.Discord, deps.ST, deps.BaseURL, deps.ArtifactsDir)
+	v1.RegisterRouter(v1Group, deps.DB, deps.SM, deps.Cfx, deps.FE, deps.Discord, deps.ST, deps.BaseURL, deps.ArtifactsDir, deps.ServersDir)
 }

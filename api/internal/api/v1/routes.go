@@ -2,23 +2,28 @@
 package v1
 
 import (
+	"context"
+
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
 
 	"github.com/runfivedev/runfive/internal/artifacts"
 	"github.com/runfivedev/runfive/internal/auth"
 	"github.com/runfivedev/runfive/internal/permissions"
-	"github.com/runfivedev/runfive/internal/runtimepath"
 	"github.com/runfivedev/runfive/internal/serverfs"
 )
 
 // RegisterRouter mounts all v1 API routes on the provided router group.
-func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *auth.CfxAuth, fe *auth.FieldEncryptor, discord *auth.DiscordAuth, st *auth.SetupTokenStore, baseURL, artifactsDir string) {
+func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *auth.CfxAuth, fe *auth.FieldEncryptor, discord *auth.DiscordAuth, st *auth.SetupTokenStore, baseURL, artifactsDir, serversDir string) {
 	artifactManager, err := artifacts.NewManager(artifactsDir)
 	if err != nil {
 		panic(err)
 	}
-	serverRegistry := serverfs.NewRegistry(runtimepath.Resolve("servers"), artifactManager)
+	serverRegistry, err := serverfs.NewRegistry(serversDir, artifactManager)
+	if err != nil {
+		panic(err)
+	}
+	serverRegistry.StartWatcher(context.Background())
 
 	authHandler := NewAuthHandler(db, sm, cfx, fe, discord, st)
 	authGroup := r.Group("/auth")
@@ -90,6 +95,10 @@ func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *a
 	serverGroup := r.Group("/servers", auth.RequireAuth(sm, db), auth.LoadPermissions(db))
 	serverGroup.Get("", serverHandler.List)
 	serverGroup.Post("", auth.RequireGlobalPerm(permissions.GlobalServers, permissions.ActionCreate), serverHandler.Create)
+
+	// Admin endpoints (owner-only manual fallbacks)
+	adminGroup := r.Group("/admin", auth.RequireAuth(sm, db), auth.RequireMaster)
+	adminGroup.Post("/reload-servers", serverHandler.Reload)
 
 	// Artifact management endpoints (permission-based)
 	artifactHandler := NewArtifactHandler(artifactManager, serverRegistry)
