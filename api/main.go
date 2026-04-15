@@ -56,7 +56,8 @@ func main() {
 	defer stopSignals()
 
 	if err := os.MkdirAll(runtimepath.Root(), 0o750); err != nil {
-		log.Fatalf("Failed to create runtime root %q: %v", runtimepath.Root(), err)
+		log.Printf("Failed to create runtime root %q: %v", runtimepath.Root(), err)
+		return
 	}
 
 	if err := runtimepath.EnsureReadme(); err != nil {
@@ -65,7 +66,8 @@ func main() {
 
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		log.Printf("Failed to load config: %v", err)
+		return
 	}
 
 	log.Printf("Data root:     %s", runtimepath.Root())
@@ -78,17 +80,20 @@ func main() {
 
 	db, err := database.Connect()
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.Printf("Failed to connect to database: %v", err)
+		return
 	}
 
 	sm, err := auth.NewSessionManager(db, cfg.SessionEncryptKey)
 	if err != nil {
-		log.Fatalf("Failed to create session manager: %v", err)
+		log.Printf("Failed to create session manager: %v", err)
+		return
 	}
 
 	fe, err := auth.NewFieldEncryptor(cfg.CfxAPIKeySecret)
 	if err != nil {
-		log.Fatalf("Failed to create field encryptor: %v", err)
+		log.Printf("Failed to create field encryptor: %v", err)
+		return
 	}
 
 	cfx := auth.NewCfxAuth(cfg.BaseURL)
@@ -96,12 +101,14 @@ func main() {
 
 	artifactManager, err := artifacts.NewManager(cfg.ArtifactsDir)
 	if err != nil {
-		log.Fatalf("Failed to create artifact manager: %v", err)
+		log.Printf("Failed to create artifact manager: %v", err)
+		return
 	}
 
 	serverRegistry, err := serverfs.NewRegistry(cfg.ServersDir, artifactManager, fe)
 	if err != nil {
-		log.Fatalf("Failed to create server registry: %v", err)
+		log.Printf("Failed to create server registry: %v", err)
+		return
 	}
 	serverRegistry.StartWatcher(lifecycleCtx)
 
@@ -110,14 +117,16 @@ func main() {
 	setupTokenStore := auth.NewSetupTokenStore()
 	var userCount int64
 	if err := db.Model(&models.User{}).Count(&userCount).Error; err != nil {
-		log.Fatalf("Failed to count users: %v", err)
+		log.Printf("Failed to count users: %v", err)
+		return
 	}
 
 	var setupURL string
 	if userCount == 0 {
 		token, err := setupTokenStore.Generate()
 		if err != nil {
-			log.Fatalf("Failed to generate setup token: %v", err)
+			log.Printf("Failed to generate setup token: %v", err)
+			return
 		}
 		setupURL = fmt.Sprintf("%s/?setup=%s", cfg.BaseURL, token)
 	}
@@ -149,7 +158,8 @@ func main() {
 	select {
 	case err := <-errCh:
 		if err != nil {
-			log.Fatal(err)
+			log.Printf("HTTP server error: %v", err)
+			return
 		}
 	case <-lifecycleCtx.Done():
 		log.Printf("Shutdown signal received, stopping managed servers...")
@@ -165,7 +175,8 @@ func main() {
 		}
 
 		if err := <-errCh; err != nil {
-			log.Fatal(err)
+			log.Printf("HTTP server error during shutdown: %v", err)
+			return
 		}
 	}
 }
