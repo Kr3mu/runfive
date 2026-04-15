@@ -78,7 +78,7 @@
 
         <div class="about-reveal flex items-center justify-center gap-5 delay-4">
             <a
-                href="https://github.com/Kr3mu/runfive"
+                href="https://github.com/runfivedev/runfive"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="text-muted-foreground/40 transition-colors hover:text-foreground"

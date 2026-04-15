@@ -18,9 +18,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Kr3mu/runfive/internal/fivemartifactsdb"
-	"github.com/Kr3mu/runfive/internal/fxserver"
-	"github.com/Kr3mu/runfive/internal/models"
+	"github.com/runfivedev/runfive/internal/fivemartifactsdb"
+	"github.com/runfivedev/runfive/internal/fxserver"
+	"github.com/runfivedev/runfive/internal/models"
 )
 
 type upstreamClient interface {

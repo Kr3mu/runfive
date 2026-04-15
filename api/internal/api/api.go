@@ -7,9 +7,9 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/logger"
 	"gorm.io/gorm"
 
-	v1 "github.com/Kr3mu/runfive/internal/api/v1"
-	"github.com/Kr3mu/runfive/internal/auth"
-	"github.com/Kr3mu/runfive/internal/spa"
+	v1 "github.com/runfivedev/runfive/internal/api/v1"
+	"github.com/runfivedev/runfive/internal/auth"
+	"github.com/runfivedev/runfive/internal/spa"
 )
 
 // AppDeps bundles all dependencies needed to construct the HTTP application.

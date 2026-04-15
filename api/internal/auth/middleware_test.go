@@ -8,8 +8,8 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
-	"github.com/Kr3mu/runfive/internal/models"
-	"github.com/Kr3mu/runfive/internal/permissions"
+	"github.com/runfivedev/runfive/internal/models"
+	"github.com/runfivedev/runfive/internal/permissions"
 )
 
 // injectPerms returns middleware that sets resolved permissions in Fiber locals.

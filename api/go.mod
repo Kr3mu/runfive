@@ -1,4 +1,4 @@
-module github.com/Kr3mu/runfive
+module github.com/runfivedev/runfive
 
 go 1.26.1
 

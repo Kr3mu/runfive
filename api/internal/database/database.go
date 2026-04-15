@@ -10,8 +10,8 @@ import (
 	"github.com/libtnb/sqlite"
 	"gorm.io/gorm"
 
-	"github.com/Kr3mu/runfive/internal/models"
-	"github.com/Kr3mu/runfive/internal/runtimepath"
+	"github.com/runfivedev/runfive/internal/models"
+	"github.com/runfivedev/runfive/internal/runtimepath"
 )
 
 var databaseConfig = &gorm.Config{}

@@ -11,7 +11,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Kr3mu/runfive/internal/runtimepath"
+	"github.com/runfivedev/runfive/internal/runtimepath"
 )
 
 // Config holds all runtime configuration for the application.

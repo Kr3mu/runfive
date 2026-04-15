@@ -11,13 +11,13 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/joho/godotenv"
 
-	"github.com/Kr3mu/runfive/internal/api"
-	"github.com/Kr3mu/runfive/internal/auth"
-	"github.com/Kr3mu/runfive/internal/config"
-	"github.com/Kr3mu/runfive/internal/console"
-	"github.com/Kr3mu/runfive/internal/database"
-	"github.com/Kr3mu/runfive/internal/models"
-	"github.com/Kr3mu/runfive/internal/runtimepath"
+	"github.com/runfivedev/runfive/internal/api"
+	"github.com/runfivedev/runfive/internal/auth"
+	"github.com/runfivedev/runfive/internal/config"
+	"github.com/runfivedev/runfive/internal/console"
+	"github.com/runfivedev/runfive/internal/database"
+	"github.com/runfivedev/runfive/internal/models"
+	"github.com/runfivedev/runfive/internal/runtimepath"
 )
 
 var appConfig = fiber.Config{

@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Kr3mu/runfive/internal/models"
+	"github.com/runfivedev/runfive/internal/models"
 )
 
 const configFilename = "server.toml"

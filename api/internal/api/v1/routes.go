@@ -5,11 +5,11 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
 
-	"github.com/Kr3mu/runfive/internal/artifacts"
-	"github.com/Kr3mu/runfive/internal/auth"
-	"github.com/Kr3mu/runfive/internal/permissions"
-	"github.com/Kr3mu/runfive/internal/runtimepath"
-	"github.com/Kr3mu/runfive/internal/serverfs"
+	"github.com/runfivedev/runfive/internal/artifacts"
+	"github.com/runfivedev/runfive/internal/auth"
+	"github.com/runfivedev/runfive/internal/permissions"
+	"github.com/runfivedev/runfive/internal/runtimepath"
+	"github.com/runfivedev/runfive/internal/serverfs"
 )
 
 // RegisterRouter mounts all v1 API routes on the provided router group.
