@@ -1,10 +1,12 @@
 package models
 
+import "time"
+
 // ServerStatus is the lifecycle state surfaced to the dashboard.
 type ServerStatus string
 
 const (
-	ServerStatusOnline   ServerStatus = "online"
+	ServerStatusRunning  ServerStatus = "running"
 	ServerStatusStarting ServerStatus = "starting"
 	ServerStatusStopped  ServerStatus = "stopped"
 	ServerStatusCrashed  ServerStatus = "crashed"
@@ -22,6 +24,38 @@ type ManagedServer struct {
 	RamMB           int          `json:"ramMB"`
 	TickMs          float64      `json:"tickMs"`
 	ArtifactVersion string       `json:"artifactVersion"`
+}
+
+// ServerProcessStatus is the live runtime state for one launched server.
+type ServerProcessStatus struct {
+	ID         string       `json:"id"`
+	Status     ServerStatus `json:"status"`
+	PID        int          `json:"pid,omitempty"`
+	ExitCode   *int         `json:"exitCode,omitempty"`
+	ExitReason string       `json:"exitReason,omitempty"`
+	UpdatedAt  time.Time    `json:"updatedAt"`
+}
+
+// ServerLogLine is one console line captured from a managed server.
+type ServerLogLine struct {
+	ID        int64     `json:"id"`
+	Timestamp time.Time `json:"timestamp"`
+	Stream    string    `json:"stream"`
+	Message   string    `json:"message"`
+}
+
+// ServerLogsResponse is returned by GET /v1/servers/:id/logs.
+type ServerLogsResponse struct {
+	Lines []ServerLogLine `json:"lines"`
+}
+
+// ServerConsoleEvent is sent over the live console websocket.
+type ServerConsoleEvent struct {
+	Type   string               `json:"type"`
+	Status *ServerProcessStatus `json:"status,omitempty"`
+	Lines  []ServerLogLine      `json:"lines,omitempty"`
+	Line   *ServerLogLine       `json:"line,omitempty"`
+	Error  string               `json:"error,omitempty"`
 }
 
 // CreateServerRequest is the body for POST /v1/servers.

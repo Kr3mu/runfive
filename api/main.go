@@ -2,22 +2,29 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/joho/godotenv"
 
 	"github.com/runfivedev/runfive/internal/api"
+	"github.com/runfivedev/runfive/internal/artifacts"
 	"github.com/runfivedev/runfive/internal/auth"
 	"github.com/runfivedev/runfive/internal/config"
 	"github.com/runfivedev/runfive/internal/console"
 	"github.com/runfivedev/runfive/internal/database"
+	"github.com/runfivedev/runfive/internal/launcher"
 	"github.com/runfivedev/runfive/internal/models"
 	"github.com/runfivedev/runfive/internal/runtimepath"
+	"github.com/runfivedev/runfive/internal/serverfs"
 )
 
 var appConfig = fiber.Config{
@@ -44,6 +51,9 @@ var listenPort = flag.String("port", "", "HTTP listen port (overrides PORT env)"
 func main() {
 	flag.Parse()
 	_ = godotenv.Load(".env")
+
+	lifecycleCtx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
 
 	if err := os.MkdirAll(runtimepath.Root(), 0o750); err != nil {
 		log.Fatalf("Failed to create runtime root %q: %v", runtimepath.Root(), err)
@@ -84,6 +94,19 @@ func main() {
 	cfx := auth.NewCfxAuth(cfg.BaseURL)
 	discord := auth.NewDiscordAuth(cfg.BaseURL, cfg.DiscordClientID, cfg.DiscordClientSecret)
 
+	artifactManager, err := artifacts.NewManager(cfg.ArtifactsDir)
+	if err != nil {
+		log.Fatalf("Failed to create artifact manager: %v", err)
+	}
+
+	serverRegistry, err := serverfs.NewRegistry(cfg.ServersDir, artifactManager, fe)
+	if err != nil {
+		log.Fatalf("Failed to create server registry: %v", err)
+	}
+	serverRegistry.StartWatcher(lifecycleCtx)
+
+	launcherManager := launcher.NewManager(serverRegistry, artifactManager)
+
 	setupTokenStore := auth.NewSetupTokenStore()
 	var userCount int64
 	if err := db.Model(&models.User{}).Count(&userCount).Error; err != nil {
@@ -100,15 +123,16 @@ func main() {
 	}
 
 	app := api.New(&appConfig, &api.AppDeps{
-		DB:           db,
-		ArtifactsDir: cfg.ArtifactsDir,
-		ServersDir:   cfg.ServersDir,
-		SM:           sm,
-		Cfx:          cfx,
-		FE:           fe,
-		Discord:      discord,
-		ST:           setupTokenStore,
-		BaseURL:      cfg.BaseURL,
+		DB:              db,
+		ArtifactManager: artifactManager,
+		ServerRegistry:  serverRegistry,
+		Launcher:        launcherManager,
+		SM:              sm,
+		Cfx:             cfx,
+		FE:              fe,
+		Discord:         discord,
+		ST:              setupTokenStore,
+		BaseURL:         cfg.BaseURL,
 	})
 
 	if setupURL != "" {
@@ -116,5 +140,32 @@ func main() {
 	} else {
 		log.Printf("Serving backend on: %s", cfg.Port)
 	}
-	log.Fatal(app.Listen(":"+cfg.Port, listenConfig))
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- app.Listen(":"+cfg.Port, listenConfig)
+	}()
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			log.Fatal(err)
+		}
+	case <-lifecycleCtx.Done():
+		log.Printf("Shutdown signal received, stopping managed servers...")
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+		defer cancel()
+
+		if err := launcherManager.ShutdownAll(shutdownCtx); err != nil {
+			log.Printf("Managed server shutdown error: %v", err)
+		}
+		if err := app.ShutdownWithContext(shutdownCtx); err != nil {
+			log.Printf("HTTP shutdown error: %v", err)
+		}
+
+		if err := <-errCh; err != nil {
+			log.Fatal(err)
+		}
+	}
 }

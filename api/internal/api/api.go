@@ -8,7 +8,10 @@ import (
 	"gorm.io/gorm"
 
 	v1 "github.com/runfivedev/runfive/internal/api/v1"
+	"github.com/runfivedev/runfive/internal/artifacts"
 	"github.com/runfivedev/runfive/internal/auth"
+	"github.com/runfivedev/runfive/internal/launcher"
+	"github.com/runfivedev/runfive/internal/serverfs"
 	"github.com/runfivedev/runfive/internal/spa"
 )
 
@@ -16,10 +19,12 @@ import (
 type AppDeps struct {
 	// DB is the GORM database connection.
 	DB *gorm.DB
-	// ArtifactsDir is the filesystem root for shared artifact installs.
-	ArtifactsDir string
-	// ServersDir is the filesystem root for panel-managed server.toml configs.
-	ServersDir string
+	// ArtifactManager manages shared artifact installs and binary resolution.
+	ArtifactManager *artifacts.Manager
+	// ServerRegistry is the filesystem-backed server config registry.
+	ServerRegistry *serverfs.Registry
+	// Launcher owns the live fxserver child processes for this API instance.
+	Launcher *launcher.Manager
 	// SM is the session manager.
 	SM *auth.SessionManager
 	// Cfx handles Cfx.re authentication.
@@ -61,5 +66,5 @@ func New(appConfig *fiber.Config, deps *AppDeps) *fiber.App {
 
 func setupRoutes(app *fiber.App, deps *AppDeps) {
 	v1Group := app.Group("/v1")
-	v1.RegisterRouter(v1Group, deps.DB, deps.SM, deps.Cfx, deps.FE, deps.Discord, deps.ST, deps.BaseURL, deps.ArtifactsDir, deps.ServersDir)
+	v1.RegisterRouter(v1Group, deps.DB, deps.SM, deps.Cfx, deps.FE, deps.Discord, deps.ST, deps.BaseURL, deps.ArtifactManager, deps.ServerRegistry, deps.Launcher)
 }

@@ -63,6 +63,17 @@ type ResourcesConfig struct {
 	Ensure []string `toml:"ensure"`
 }
 
+// LaunchSpec contains the resolved filesystem/runtime inputs required to start
+// one managed server process.
+type LaunchSpec struct {
+	ID              string
+	Name            string
+	ServerDir       string
+	ConfigPath      string
+	ArtifactVersion string
+	OneSync         string
+}
+
 type artifactLookup interface {
 	IsInstalled(version string) bool
 }
@@ -278,6 +289,27 @@ func (r *Registry) Get(id string) (models.ManagedServer, bool) {
 		return models.ManagedServer{}, false
 	}
 	return toManagedServer(e), true
+}
+
+// LaunchSpec returns the resolved launch inputs for a valid server entry.
+func (r *Registry) LaunchSpec(id string) (LaunchSpec, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	e, ok := r.entries[id]
+	if !ok || e.invalid {
+		return LaunchSpec{}, false
+	}
+
+	serverDir := filepath.Join(r.rootDir, id)
+	return LaunchSpec{
+		ID:              id,
+		Name:            e.config.Name,
+		ServerDir:       serverDir,
+		ConfigPath:      filepath.Join(serverDir, configurationsDir, generatedCfgFile),
+		ArtifactVersion: e.config.ArtifactVersion,
+		OneSync:         strings.TrimSpace(e.config.Gameplay.OneSync),
+	}, true
 }
 
 // HasServer reports whether id currently exists as a valid entry. The
