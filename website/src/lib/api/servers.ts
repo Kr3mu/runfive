@@ -18,6 +18,8 @@ export interface ManagedServer {
     status: ServerStatus;
     /** Public "host:port" shown in the switcher */
     address: string;
+    /** Configured TCP/UDP endpoint port from server.toml */
+    port: number;
     /** Connected players right now */
     playerCount: number;
     /** Configured max slots */
@@ -39,6 +41,10 @@ export interface CreateServerRequest {
     artifactVersion: string;
     /** Optional Cfx.re license key (cfxk_...). Encrypted server-side. */
     licenseKey?: string;
+    /** TCP/UDP endpoint port. Omit or 0 = server-side auto-allocation. */
+    port?: number;
+    /** sv_maxclients slot count. Omit or 0 = server-side default (32). */
+    maxPlayers?: number;
 }
 
 export interface ServerProcessStatus {

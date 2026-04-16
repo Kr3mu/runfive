@@ -7,6 +7,7 @@
     } from "$lib/api/artifacts";
     import {
         createServer,
+        serversQueryOptions,
         type ManagedServer,
     } from "$lib/api/servers";
     import LinuxIcon from "$lib/components/icons/linux.svelte";
@@ -22,6 +23,7 @@
     import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
     import KeyRound from "@lucide/svelte/icons/key-round";
     import ExternalLink from "@lucide/svelte/icons/external-link";
+    import Network from "@lucide/svelte/icons/network";
     import { toast } from "svelte-sonner";
 
     interface Props {
@@ -42,8 +44,18 @@
 
     type CreationPhase = "idle" | "downloading" | "creating";
 
+    /** Port range mirrors the backend allow-list in serverfs/registry.go. */
+    const MIN_PORT = 1024;
+    const MAX_PORT = 65535;
+    const DEFAULT_BASE_PORT = 30120;
+    /** Slot-count bounds mirror resolveMaxPlayers in serverfs/registry.go. */
+    const MIN_MAX_PLAYERS = 1;
+    const MAX_MAX_PLAYERS = 2048;
+    const DEFAULT_MAX_PLAYERS = 32;
+
     const queryClient = useQueryClient();
     const artifactsQuery = createQuery(() => artifactsQueryOptions());
+    const serversQuery = createQuery(() => serversQueryOptions());
 
     const installedArtifacts = $derived(artifactsQuery.data?.installed ?? []);
     const hostOs = $derived(artifactsQuery.data?.os);
@@ -57,10 +69,71 @@
     let serverName = $state("");
     let artifactVersion = $state("");
     let licenseKey = $state("");
+    /** Raw input string so the user can type freely; coerced on submit. */
+    let portInput = $state("");
+    let maxPlayersInput = $state(String(DEFAULT_MAX_PLAYERS));
 
     const licenseKeyInvalid = $derived(
         licenseKey.trim().length > 0 && !licenseKey.trim().startsWith("cfxk_"),
     );
+
+    /** Map of currently-claimed ports → server name, for conflict detection. */
+    const portOwners = $derived.by((): Map<number, string> => {
+        const entries: ManagedServer[] = serversQuery.data ?? [];
+        const map = new Map<number, string>();
+        for (const server of entries) {
+            if (server.port > 0) map.set(server.port, server.name);
+        }
+        return map;
+    });
+
+    /** First port ≥ DEFAULT_BASE_PORT that is not in portOwners. */
+    const nextFreePort = $derived.by((): number => {
+        for (let p: number = DEFAULT_BASE_PORT; p <= MAX_PORT; p += 1) {
+            if (!portOwners.has(p)) return p;
+        }
+        return DEFAULT_BASE_PORT;
+    });
+
+    /** Numeric view of the user's input. NaN when empty/unparseable. */
+    const portValue = $derived.by((): number => {
+        const trimmed: string = portInput.trim();
+        if (trimmed === "") return Number.NaN;
+        const parsed: number = Number(trimmed);
+        return Number.isInteger(parsed) ? parsed : Number.NaN;
+    });
+
+    const portOutOfRange = $derived(
+        !Number.isNaN(portValue) && (portValue < MIN_PORT || portValue > MAX_PORT),
+    );
+    const portConflictOwner = $derived.by((): string | null => {
+        if (Number.isNaN(portValue)) return null;
+        return portOwners.get(portValue) ?? null;
+    });
+    const portInvalid = $derived(portOutOfRange || portConflictOwner !== null);
+
+    /** Numeric view of the max-players input; NaN when empty/unparseable. */
+    const maxPlayersValue = $derived.by((): number => {
+        const trimmed: string = maxPlayersInput.trim();
+        if (trimmed === "") return Number.NaN;
+        const parsed: number = Number(trimmed);
+        return Number.isInteger(parsed) ? parsed : Number.NaN;
+    });
+
+    const maxPlayersOutOfRange = $derived(
+        !Number.isNaN(maxPlayersValue) &&
+            (maxPlayersValue < MIN_MAX_PLAYERS || maxPlayersValue > MAX_MAX_PLAYERS),
+    );
+    const maxPlayersInvalid = $derived(
+        Number.isNaN(maxPlayersValue) || maxPlayersOutOfRange,
+    );
+
+    /** Pre-fill the port once the servers query resolves; user edits win. */
+    $effect((): void => {
+        if (portInput !== "") return;
+        if (serversQuery.data === undefined) return;
+        portInput = String(nextFreePort);
+    });
 
     let creationPhase = $state<CreationPhase>("idle");
     let phaseStartedAt = $state<number | null>(null);
@@ -224,6 +297,28 @@
             toast.error("License key must start with cfxk_");
             return;
         }
+        if (Number.isNaN(portValue)) {
+            toast.error("Enter a port number");
+            return;
+        }
+        if (portOutOfRange) {
+            toast.error(`Port must be between ${MIN_PORT} and ${MAX_PORT}`);
+            return;
+        }
+        if (portConflictOwner) {
+            toast.error(`Port ${portValue} is already used by ${portConflictOwner}`);
+            return;
+        }
+        if (Number.isNaN(maxPlayersValue)) {
+            toast.error("Enter a max player count");
+            return;
+        }
+        if (maxPlayersOutOfRange) {
+            toast.error(
+                `Max players must be between ${MIN_MAX_PLAYERS} and ${MAX_MAX_PLAYERS}`,
+            );
+            return;
+        }
 
         try {
             if (!selectedArtifactInstalled) {
@@ -237,12 +332,16 @@
             const created: ManagedServer = await createServer({
                 name: serverName.trim(),
                 artifactVersion,
+                port: portValue,
+                maxPlayers: maxPlayersValue,
                 ...(trimmedKey ? { licenseKey: trimmedKey } : {}),
             });
 
             serverState.select(created.id);
             serverName = "";
             licenseKey = "";
+            portInput = "";
+            maxPlayersInput = String(DEFAULT_MAX_PLAYERS);
 
             await Promise.all([
                 queryClient.invalidateQueries({ queryKey: ["servers"] }),
@@ -335,6 +434,82 @@
                 Open keymaster
                 <ExternalLink size={10} />
             </a>
+        </div>
+    </div>
+</section>
+
+<!-- Network -->
+<section class="mb-8">
+    <h2 class="mb-3 flex items-center gap-2 text-xs font-semibold tracking-widest text-muted-foreground/60 uppercase">
+        <Network size={14} />
+        Network
+    </h2>
+    <div class="rounded-lg border border-border bg-card p-4">
+        <div class="grid grid-cols-2 gap-3">
+            <!-- Port -->
+            <div>
+                <label
+                    for="server-port"
+                    class="mb-1.5 block text-[10px] font-semibold tracking-widest text-muted-foreground/50 uppercase"
+                >
+                    Port
+                </label>
+                <input
+                    id="server-port"
+                    bind:value={portInput}
+                    type="number"
+                    inputmode="numeric"
+                    min={MIN_PORT}
+                    max={MAX_PORT}
+                    placeholder={String(nextFreePort)}
+                    class="no-spin h-10 w-full rounded-md border bg-background px-3 font-mono text-sm text-foreground outline-none transition-colors placeholder:font-sans placeholder:text-muted-foreground/40 focus:border-primary/50 {portInvalid
+                        ? 'border-destructive/50'
+                        : 'border-border'}"
+                />
+                {#if portConflictOwner}
+                    <p class="mt-1.5 flex items-center gap-1 text-[11px] text-destructive/80">
+                        <TriangleAlert size={10} class="shrink-0" />
+                        <span class="truncate">Used by <span class="font-medium">{portConflictOwner}</span></span>
+                    </p>
+                {:else if portOutOfRange}
+                    <p class="mt-1.5 flex items-center gap-1 text-[11px] text-destructive/80">
+                        <TriangleAlert size={10} class="shrink-0" />
+                        <span>Out of range ({MIN_PORT}–{MAX_PORT})</span>
+                    </p>
+                {:else}
+                    <p class="mt-1.5 text-[11px] text-muted-foreground/60">TCP + UDP endpoint</p>
+                {/if}
+            </div>
+
+            <!-- Max players -->
+            <div>
+                <label
+                    for="server-max-players"
+                    class="mb-1.5 block text-[10px] font-semibold tracking-widest text-muted-foreground/50 uppercase"
+                >
+                    Max Players
+                </label>
+                <input
+                    id="server-max-players"
+                    bind:value={maxPlayersInput}
+                    type="number"
+                    inputmode="numeric"
+                    min={MIN_MAX_PLAYERS}
+                    max={MAX_MAX_PLAYERS}
+                    placeholder={String(DEFAULT_MAX_PLAYERS)}
+                    class="no-spin h-10 w-full rounded-md border bg-background px-3 font-mono text-sm text-foreground outline-none transition-colors placeholder:font-sans placeholder:text-muted-foreground/40 focus:border-primary/50 {maxPlayersInvalid
+                        ? 'border-destructive/50'
+                        : 'border-border'}"
+                />
+                {#if maxPlayersOutOfRange}
+                    <p class="mt-1.5 flex items-center gap-1 text-[11px] text-destructive/80">
+                        <TriangleAlert size={10} class="shrink-0" />
+                        <span>Out of range ({MIN_MAX_PLAYERS}–{MAX_MAX_PLAYERS})</span>
+                    </p>
+                {:else}
+                    <p class="mt-1.5 text-[11px] text-muted-foreground/60">Slot count (sv_maxclients)</p>
+                {/if}
+            </div>
         </div>
     </div>
 </section>
@@ -535,7 +710,13 @@
         </p>
         <button
             onclick={handleCreateServer}
-            disabled={artifactsQuery.isPending || !serverName.trim() || !artifactVersion || licenseKeyInvalid}
+            disabled={artifactsQuery.isPending ||
+                !serverName.trim() ||
+                !artifactVersion ||
+                licenseKeyInvalid ||
+                portInvalid ||
+                Number.isNaN(portValue) ||
+                maxPlayersInvalid}
             class="inline-flex shrink-0 items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
         >
             Create Server
@@ -555,5 +736,16 @@
 
     :global(.progress-indeterminate) {
         animation: progress-indeterminate 1.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+    }
+
+    /* Hide the browser's number-input spin buttons so the field matches the
+       other monospace inputs in this form. */
+    .no-spin::-webkit-outer-spin-button,
+    .no-spin::-webkit-inner-spin-button {
+        appearance: none;
+        margin: 0;
+    }
+    .no-spin {
+        -moz-appearance: textfield;
     }
 </style>
