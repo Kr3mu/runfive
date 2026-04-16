@@ -32,6 +32,9 @@ var (
 	ErrAlreadyRunning = errors.New("server already running")
 	// ErrNotRunning is returned when a command targets a stopped server.
 	ErrNotRunning = errors.New("server is not running")
+	// ErrStopFailed is returned when a server process refuses to exit even
+	// after the final SIGKILL / taskkill /F attempt.
+	ErrStopFailed = errors.New("server process did not exit after force kill")
 )
 
 type artifactResolver interface {
@@ -208,7 +211,10 @@ func (m *Manager) StopWithContext(ctx context.Context, id string) (models.Server
 	if err := killProcessTree(pid); err != nil {
 		runtime.appendSystem(fmt.Sprintf("Force kill failed: %v", err))
 	}
-	_ = waitForDone(ctx, done, 2*time.Second)
+	if !waitForDone(ctx, done, 2*time.Second) {
+		runtime.appendSystem("Process still alive after force kill — panel gave up")
+		return runtime.Status(), ErrStopFailed
+	}
 
 	return runtime.Status(), nil
 }
@@ -274,6 +280,12 @@ func (m *Manager) SendCommand(id, command string) error {
 		return nil
 	}
 
+	// The write is performed under stdinMu rather than r.mu so broadcast/status
+	// readers are not blocked, but is still serialized against waitForExit's
+	// pipe teardown which acquires the same lock before niling r.stdin.
+	runtime.stdinMu.Lock()
+	defer runtime.stdinMu.Unlock()
+
 	runtime.mu.Lock()
 	stdin := runtime.stdin
 	running := runtime.status == models.ServerStatusStarting || runtime.status == models.ServerStatusRunning
@@ -283,9 +295,11 @@ func (m *Manager) SendCommand(id, command string) error {
 		return ErrNotRunning
 	}
 
+	if _, err := io.WriteString(stdin, command+"\n"); err != nil {
+		return fmt.Errorf("write console input: %w", err)
+	}
 	runtime.appendCommand(command)
-	_, err = io.WriteString(stdin, command+"\n")
-	return err
+	return nil
 }
 
 func (m *Manager) ensureRuntime(id string) (*serverRuntime, error) {
@@ -320,6 +334,11 @@ func (m *Manager) ensureRuntime(id string) (*serverRuntime, error) {
 
 type serverRuntime struct {
 	id string
+
+	// stdinMu serializes writes to the fxserver stdin pipe and protects against
+	// use-after-close when waitForExit tears the pipe down. Always acquire
+	// stdinMu BEFORE mu if both are needed, to avoid lock-order inversion.
+	stdinMu sync.Mutex
 
 	mu            sync.Mutex
 	status        models.ServerStatus
@@ -439,6 +458,9 @@ func (r *serverRuntime) waitForExit(cmd *exec.Cmd) {
 		}
 	}
 
+	// Serialize with SendCommand before niling the pipe so an in-flight write
+	// cannot race the teardown.
+	r.stdinMu.Lock()
 	r.mu.Lock()
 	stopRequested := r.stopRequested
 	r.cmd = nil
@@ -446,11 +468,20 @@ func (r *serverRuntime) waitForExit(cmd *exec.Cmd) {
 	r.pid = 0
 	r.updatedAt = time.Now().UTC()
 
+	// A panel-initiated stop always lands in Stopped — the force-kill path
+	// legitimately leaves exitCode != 0 (SIGTERM/SIGKILL/taskkill produce 143,
+	// 137, 1 etc.) and that must not masquerade as a crash. The raw code is
+	// kept in exitCode for diagnostics either way.
 	switch {
 	case stopRequested:
 		r.status = models.ServerStatusStopped
-		r.exitReason = "stopped by panel"
-		r.exitCode = nil
+		if exitCode != 0 {
+			r.exitReason = fmt.Sprintf("stopped by panel (exit %d)", exitCode)
+			r.exitCode = intPtr(exitCode)
+		} else {
+			r.exitReason = "stopped by panel"
+			r.exitCode = nil
+		}
 	case exitCode != 0:
 		r.status = models.ServerStatusCrashed
 		r.exitReason = waitReason
@@ -465,13 +496,14 @@ func (r *serverRuntime) waitForExit(cmd *exec.Cmd) {
 	r.done = nil
 	r.stopRequested = false
 	r.mu.Unlock()
+	r.stdinMu.Unlock()
 
 	if done != nil {
 		close(done)
 	}
 
-	if !stopRequested && exitCode != 0 {
-		r.appendSystem(fmt.Sprintf("Server crashed: %s", waitReason))
+	if exitCode != 0 {
+		r.appendSystem(fmt.Sprintf("Server exited with code %d: %s", exitCode, waitReason))
 	}
 	r.broadcastStatus()
 }
@@ -542,15 +574,26 @@ func (r *serverRuntime) broadcast(event models.ServerConsoleEvent) {
 	}
 }
 
+// ringBuffer stores the most recent log lines in a fixed-capacity circular
+// buffer. Writes are O(1) regardless of how many lines have passed through;
+// older entries are overwritten in place once capacity is reached.
 type ringBuffer struct {
 	mu       sync.RWMutex
 	capacity int
 	nextID   int64
-	lines    []models.ServerLogLine
+	buf      []models.ServerLogLine
+	head     int // index of the next write slot
+	size     int // number of valid entries currently stored
 }
 
 func newRingBuffer(capacity int) *ringBuffer {
-	return &ringBuffer{capacity: capacity}
+	if capacity <= 0 {
+		capacity = 1
+	}
+	return &ringBuffer{
+		capacity: capacity,
+		buf:      make([]models.ServerLogLine, capacity),
+	}
 }
 
 func (r *ringBuffer) add(stream, message string) models.ServerLogLine {
@@ -565,10 +608,10 @@ func (r *ringBuffer) add(stream, message string) models.ServerLogLine {
 		Message:   message,
 	}
 
-	r.lines = append(r.lines, line)
-	if len(r.lines) > r.capacity {
-		trim := len(r.lines) - r.capacity
-		r.lines = append([]models.ServerLogLine(nil), r.lines[trim:]...)
+	r.buf[r.head] = line
+	r.head = (r.head + 1) % r.capacity
+	if r.size < r.capacity {
+		r.size++
 	}
 
 	return line
@@ -578,12 +621,19 @@ func (r *ringBuffer) tail(n int) []models.ServerLogLine {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	if n <= 0 || n > len(r.lines) {
-		n = len(r.lines)
+	if n <= 0 || n > r.size {
+		n = r.size
 	}
-	start := len(r.lines) - n
+	if n == 0 {
+		return []models.ServerLogLine{}
+	}
+
 	out := make([]models.ServerLogLine, n)
-	copy(out, r.lines[start:])
+	// The oldest of the returned `n` entries sits n slots before head.
+	start := (r.head - n + r.capacity) % r.capacity
+	for i := 0; i < n; i++ {
+		out[i] = r.buf[(start+i)%r.capacity]
+	}
 	return out
 }
 
