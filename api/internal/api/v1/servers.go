@@ -30,7 +30,7 @@ const (
 
 type serverRegistry interface {
 	List() ([]models.ManagedServer, error)
-	Create(name, artifactVersion string) (models.ManagedServer, error)
+	Create(name, artifactVersion, licenseKey string) (models.ManagedServer, error)
 	Reload() error
 }
 
@@ -100,6 +100,7 @@ func (h *ServerHandler) Create(c fiber.Ctx) error {
 
 	req.Name = strings.TrimSpace(req.Name)
 	req.ArtifactVersion = strings.TrimSpace(req.ArtifactVersion)
+	req.LicenseKey = strings.TrimSpace(req.LicenseKey)
 
 	if req.Name == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "server name is required")
@@ -107,12 +108,15 @@ func (h *ServerHandler) Create(c fiber.Ctx) error {
 	if req.ArtifactVersion == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "artifact version is required")
 	}
+	if req.LicenseKey != "" && !strings.HasPrefix(req.LicenseKey, "cfxk_") {
+		return fiber.NewError(fiber.StatusBadRequest, "license key must start with cfxk_")
+	}
 
 	if _, err := h.artifacts.Install(context.Background(), req.ArtifactVersion); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
 
-	server, err := h.registry.Create(req.Name, req.ArtifactVersion)
+	server, err := h.registry.Create(req.Name, req.ArtifactVersion, req.LicenseKey)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}

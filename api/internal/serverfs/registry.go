@@ -3,6 +3,7 @@ package serverfs
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -98,7 +99,7 @@ type WarningHandler func(serverID, message string)
 type Registry struct {
 	rootDir   string
 	artifacts artifactLookup
-	dec       FieldDecryptor
+	cipher    FieldCipher
 
 	mu       sync.RWMutex
 	entries  map[string]*entry
@@ -108,14 +109,14 @@ type Registry struct {
 
 // NewRegistry creates a registry rooted at rootDir and performs an initial
 // load. Call StartWatcher separately once the caller is ready to consume
-// filesystem events so tests can opt out. The decryptor is used to render
-// generated server.cfg files containing sensitive values such as the license
-// key; pass nil if no encrypted fields are in use.
-func NewRegistry(rootDir string, artifacts artifactLookup, dec FieldDecryptor) (*Registry, error) {
+// filesystem events so tests can opt out. The cipher is used both to render
+// generated server.cfg files (decrypt) and to accept new secrets on create
+// (encrypt); pass nil if no encrypted fields are in use.
+func NewRegistry(rootDir string, artifacts artifactLookup, cipher FieldCipher) (*Registry, error) {
 	r := &Registry{
 		rootDir:   rootDir,
 		artifacts: artifacts,
-		dec:       dec,
+		cipher:    cipher,
 		entries:   make(map[string]*entry),
 	}
 	if err := r.Reload(); err != nil {
@@ -185,7 +186,7 @@ func (r *Registry) Reload() error {
 			continue
 		}
 		serverDir := filepath.Join(r.rootDir, id)
-		warnings, err := writeGeneratedServerCfg(serverDir, &e.config, r.dec)
+		warnings, err := writeGeneratedServerCfg(serverDir, &e.config, r.cipher)
 		if err != nil {
 			log.Printf("[serverfs] %s: generate server.cfg: %v", id, err)
 		}
@@ -374,10 +375,13 @@ func (r *Registry) HasServer(id string) bool {
 }
 
 // Create allocates a new server directory, writes the default server.toml,
-// and refreshes the cache.
-func (r *Registry) Create(name, artifactVersion string) (models.ManagedServer, error) {
+// and refreshes the cache. licenseKey is the optional plaintext Cfx.re key
+// (cfxk_...) which is encrypted with the registry cipher before being
+// persisted. Pass an empty string to create a server without a license key.
+func (r *Registry) Create(name, artifactVersion, licenseKey string) (models.ManagedServer, error) {
 	name = strings.TrimSpace(name)
 	artifactVersion = strings.TrimSpace(artifactVersion)
+	licenseKey = strings.TrimSpace(licenseKey)
 
 	if name == "" {
 		return models.ManagedServer{}, fmt.Errorf("server name is required")
@@ -387,6 +391,11 @@ func (r *Registry) Create(name, artifactVersion string) (models.ManagedServer, e
 	}
 	if r.artifacts != nil && !r.artifacts.IsInstalled(artifactVersion) {
 		return models.ManagedServer{}, fmt.Errorf("artifact version %s is not installed", artifactVersion)
+	}
+
+	encryptedLicense, err := r.encryptLicense(licenseKey)
+	if err != nil {
+		return models.ManagedServer{}, err
 	}
 
 	if err := os.MkdirAll(r.rootDir, 0o750); err != nil {
@@ -404,6 +413,8 @@ func (r *Registry) Create(name, artifactVersion string) (models.ManagedServer, e
 	}
 
 	cfg := defaultServerConfig(name, artifactVersion)
+	cfg.License.KeyEncrypted = encryptedLicense
+	cfg.Network.Port = r.allocatePort()
 	if err := writeServerConfig(filepath.Join(serverDir, configFilename), &cfg); err != nil {
 		return models.ManagedServer{}, err
 	}
@@ -417,6 +428,27 @@ func (r *Registry) Create(name, artifactVersion string) (models.ManagedServer, e
 		return models.ManagedServer{}, fmt.Errorf("server %s missing from cache after create", dirID)
 	}
 	return srv, nil
+}
+
+// encryptLicense converts a plaintext Cfx.re key to the base64 AES-GCM blob
+// stored in server.toml. An empty key returns "" (no key persisted). A key
+// without the `cfxk_` prefix is rejected so typos don't silently produce an
+// unbootable server.
+func (r *Registry) encryptLicense(plain string) (string, error) {
+	if plain == "" {
+		return "", nil
+	}
+	if !strings.HasPrefix(plain, "cfxk_") {
+		return "", fmt.Errorf("license key must start with cfxk_")
+	}
+	if r.cipher == nil {
+		return "", fmt.Errorf("license key provided but no field cipher is configured")
+	}
+	ciphertext, err := r.cipher.Encrypt([]byte(plain))
+	if err != nil {
+		return "", fmt.Errorf("encrypt license key: %w", err)
+	}
+	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
 
 // ArtifactReferences returns server IDs pointing at the given artifact version.
@@ -455,6 +487,31 @@ var (
 	unsupportedRe = regexp.MustCompile(`[^A-Za-z0-9_-]+`)
 	multiUndersRe = regexp.MustCompile(`_+`)
 )
+
+// defaultBasePort is where the auto-allocator starts looking for a free slot.
+// 30120 is the fxserver convention and matches what human-edited configs use.
+const defaultBasePort = 30120
+
+// allocatePort picks the next unused port at or above defaultBasePort. Only
+// ports currently held by another entry are skipped — a server that has been
+// deleted frees its port immediately on the next reload.
+func (r *Registry) allocatePort() int {
+	r.mu.RLock()
+	taken := make(map[int]struct{}, len(r.entries))
+	for _, e := range r.entries {
+		if e.config.Network.Port > 0 {
+			taken[e.config.Network.Port] = struct{}{}
+		}
+	}
+	r.mu.RUnlock()
+
+	for port := defaultBasePort; port < 65536; port++ {
+		if _, clash := taken[port]; !clash {
+			return port
+		}
+	}
+	return defaultBasePort
+}
 
 func sanitizeDirName(name string) string {
 	sanitized := strings.TrimSpace(name)

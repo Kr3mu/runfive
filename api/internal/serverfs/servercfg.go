@@ -30,6 +30,14 @@ type FieldDecryptor interface {
 	Decrypt(ciphertext []byte) ([]byte, error)
 }
 
+// FieldCipher bundles both directions of field-level encryption and is
+// required when the registry writes new encrypted values (e.g. initial
+// license key on server creation), not only reads existing ones.
+type FieldCipher interface {
+	FieldDecryptor
+	Encrypt(plaintext []byte) ([]byte, error)
+}
+
 // renderServerCfg produces a deterministic fxserver server.cfg from a
 // ServerConfig and its already-decrypted license key. OneSync is deliberately
 // omitted — setting it via server.cfg is deprecated as of 2026 and the

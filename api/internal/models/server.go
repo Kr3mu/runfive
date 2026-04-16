@@ -62,6 +62,10 @@ type ServerConsoleEvent struct {
 type CreateServerRequest struct {
 	Name            string `json:"name"`
 	ArtifactVersion string `json:"artifactVersion"`
+	// LicenseKey is the optional Cfx.re license key (cfxk_...) the panel
+	// encrypts and writes to the new server's TOML. Empty means "I'll set
+	// this later" — the server will refuse to boot until one is provided.
+	LicenseKey string `json:"licenseKey,omitempty"`
 }
 
 // InstalledArtifact represents an extracted artifact on disk.
