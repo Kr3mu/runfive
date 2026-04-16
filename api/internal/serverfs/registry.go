@@ -377,8 +377,11 @@ func (r *Registry) HasServer(id string) bool {
 // Create allocates a new server directory, writes the default server.toml,
 // and refreshes the cache. licenseKey is the optional plaintext Cfx.re key
 // (cfxk_...) which is encrypted with the registry cipher before being
-// persisted. Pass an empty string to create a server without a license key.
-func (r *Registry) Create(name, artifactVersion, licenseKey string) (models.ManagedServer, error) {
+// persisted. port is the TCP/UDP endpoint port — pass 0 to let the registry
+// pick the next free slot. maxPlayers is the sv_maxclients value — pass 0
+// to use the panel default. Pass an empty licenseKey to create a server
+// without a license key.
+func (r *Registry) Create(name, artifactVersion, licenseKey string, port, maxPlayers int) (models.ManagedServer, error) {
 	name = strings.TrimSpace(name)
 	artifactVersion = strings.TrimSpace(artifactVersion)
 	licenseKey = strings.TrimSpace(licenseKey)
@@ -391,6 +394,16 @@ func (r *Registry) Create(name, artifactVersion, licenseKey string) (models.Mana
 	}
 	if r.artifacts != nil && !r.artifacts.IsInstalled(artifactVersion) {
 		return models.ManagedServer{}, fmt.Errorf("artifact version %s is not installed", artifactVersion)
+	}
+
+	resolvedPort, err := r.resolvePort(port)
+	if err != nil {
+		return models.ManagedServer{}, err
+	}
+
+	resolvedMax, err := resolveMaxPlayers(maxPlayers)
+	if err != nil {
+		return models.ManagedServer{}, err
 	}
 
 	encryptedLicense, err := r.encryptLicense(licenseKey)
@@ -414,7 +427,8 @@ func (r *Registry) Create(name, artifactVersion, licenseKey string) (models.Mana
 
 	cfg := defaultServerConfig(name, artifactVersion)
 	cfg.License.KeyEncrypted = encryptedLicense
-	cfg.Network.Port = r.allocatePort()
+	cfg.Network.Port = resolvedPort
+	cfg.Network.MaxClients = resolvedMax
 	if err := writeServerConfig(filepath.Join(serverDir, configFilename), &cfg); err != nil {
 		return models.ManagedServer{}, err
 	}
@@ -492,25 +506,77 @@ var (
 // 30120 is the fxserver convention and matches what human-edited configs use.
 const defaultBasePort = 30120
 
+// Port range excludes privileged ports (<1024) so operators don't accidentally
+// ask fxserver to bind 22 or 80. The upper bound is the TCP/UDP maximum.
+const (
+	minUserPort = 1024
+	maxUserPort = 65535
+)
+
+// Max-players bounds: fxserver supports up to 2048 slots, anything higher
+// silently gets clamped. Zero is reserved for "use the default".
+const (
+	defaultMaxPlayers = 32
+	minMaxPlayers     = 1
+	maxMaxPlayers     = 2048
+)
+
+// resolveMaxPlayers validates a caller-supplied slot count or falls back to
+// the panel default when the value is zero.
+func resolveMaxPlayers(value int) (int, error) {
+	if value == 0 {
+		return defaultMaxPlayers, nil
+	}
+	if value < minMaxPlayers || value > maxMaxPlayers {
+		return 0, fmt.Errorf("max players must be between %d and %d", minMaxPlayers, maxMaxPlayers)
+	}
+	return value, nil
+}
+
 // allocatePort picks the next unused port at or above defaultBasePort. Only
 // ports currently held by another entry are skipped — a server that has been
 // deleted frees its port immediately on the next reload.
 func (r *Registry) allocatePort() int {
-	r.mu.RLock()
-	taken := make(map[int]struct{}, len(r.entries))
-	for _, e := range r.entries {
-		if e.config.Network.Port > 0 {
-			taken[e.config.Network.Port] = struct{}{}
-		}
-	}
-	r.mu.RUnlock()
-
-	for port := defaultBasePort; port < 65536; port++ {
+	taken := r.takenPorts()
+	for port := defaultBasePort; port <= maxUserPort; port++ {
 		if _, clash := taken[port]; !clash {
 			return port
 		}
 	}
 	return defaultBasePort
+}
+
+// resolvePort validates a caller-supplied port (range + conflict) or falls
+// back to allocatePort when port is zero. Returned errors are safe to surface
+// to the HTTP handler as 400-class messages.
+func (r *Registry) resolvePort(port int) (int, error) {
+	if port == 0 {
+		return r.allocatePort(), nil
+	}
+	if port < minUserPort || port > maxUserPort {
+		return 0, fmt.Errorf("port %d is outside the allowed range %d-%d", port, minUserPort, maxUserPort)
+	}
+
+	taken := r.takenPorts()
+	if owner, clash := taken[port]; clash {
+		return 0, fmt.Errorf("port %d is already claimed by %q", port, owner)
+	}
+	return port, nil
+}
+
+// takenPorts returns a map of currently claimed ports → owning server name,
+// for both conflict detection and auto-allocation. Invalid entries are
+// included so we don't paper over a pre-existing collision.
+func (r *Registry) takenPorts() map[int]string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	taken := make(map[int]string, len(r.entries))
+	for _, e := range r.entries {
+		if e.config.Network.Port > 0 {
+			taken[e.config.Network.Port] = e.config.Name
+		}
+	}
+	return taken
 }
 
 func sanitizeDirName(name string) string {
@@ -588,6 +654,7 @@ func toManagedServer(e *entry) models.ManagedServer {
 		Name:            e.config.Name,
 		Status:          models.ServerStatusStopped,
 		Address:         "",
+		Port:            e.config.Network.Port,
 		PlayerCount:     0,
 		MaxPlayers:      e.config.Network.MaxClients,
 		CPU:             0,

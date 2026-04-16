@@ -30,7 +30,7 @@ const (
 
 type serverRegistry interface {
 	List() ([]models.ManagedServer, error)
-	Create(name, artifactVersion, licenseKey string) (models.ManagedServer, error)
+	Create(name, artifactVersion, licenseKey string, port, maxPlayers int) (models.ManagedServer, error)
 	Reload() error
 }
 
@@ -116,9 +116,9 @@ func (h *ServerHandler) Create(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
 
-	server, err := h.registry.Create(req.Name, req.ArtifactVersion, req.LicenseKey)
+	server, err := h.registry.Create(req.Name, req.ArtifactVersion, req.LicenseKey, req.Port, req.MaxPlayers)
 	if err != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(server)

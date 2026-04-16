@@ -18,6 +18,7 @@ type ManagedServer struct {
 	Name            string       `json:"name"`
 	Status          ServerStatus `json:"status"`
 	Address         string       `json:"address"`
+	Port            int          `json:"port"`
 	PlayerCount     int          `json:"playerCount"`
 	MaxPlayers      int          `json:"maxPlayers"`
 	CPU             int          `json:"cpu"`
@@ -66,6 +67,12 @@ type CreateServerRequest struct {
 	// encrypts and writes to the new server's TOML. Empty means "I'll set
 	// this later" — the server will refuse to boot until one is provided.
 	LicenseKey string `json:"licenseKey,omitempty"`
+	// Port is the optional TCP/UDP endpoint port. Zero means "let the panel
+	// pick the next free port" and is the recommended default.
+	Port int `json:"port,omitempty"`
+	// MaxPlayers is the optional sv_maxclients value. Zero means "use the
+	// panel default" (currently 32).
+	MaxPlayers int `json:"maxPlayers,omitempty"`
 }
 
 // InstalledArtifact represents an extracted artifact on disk.
