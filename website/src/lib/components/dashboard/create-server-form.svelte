@@ -14,16 +14,12 @@
     import WindowsIcon from "$lib/components/icons/windows.svelte";
     import { serverState } from "$lib/server-state.svelte";
     import LoaderCircle from "@lucide/svelte/icons/loader-circle";
-    import Server from "@lucide/svelte/icons/server";
-    import HardDriveDownload from "@lucide/svelte/icons/hard-drive-download";
     import Search from "@lucide/svelte/icons/search";
     import Check from "@lucide/svelte/icons/check";
     import ChevronDown from "@lucide/svelte/icons/chevron-down";
     import Sparkles from "@lucide/svelte/icons/sparkles";
     import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
-    import KeyRound from "@lucide/svelte/icons/key-round";
     import ExternalLink from "@lucide/svelte/icons/external-link";
-    import Network from "@lucide/svelte/icons/network";
     import { toast } from "svelte-sonner";
 
     interface Props {
@@ -133,6 +129,87 @@
         if (portInput !== "") return;
         if (serversQuery.data === undefined) return;
         portInput = String(nextFreePort);
+    });
+
+    /**
+     * Per-field visual state for the status dots next to each group label.
+     * `warning` is an amber state that lets submit proceed after explicit
+     * user acknowledgement (used for port collisions where the operator
+     * might genuinely want to override).
+     */
+    type FieldState = "empty" | "valid" | "invalid" | "pending" | "warning";
+
+    const nameState = $derived<FieldState>(serverName.trim() ? "valid" : "empty");
+
+    const licenseState = $derived<FieldState>(
+        licenseKeyInvalid
+            ? "invalid"
+            : licenseKey.trim()
+              ? "valid"
+              : "empty",
+    );
+
+    const portState = $derived<FieldState>(
+        portOutOfRange || Number.isNaN(portValue)
+            ? "invalid"
+            : portConflictOwner
+              ? "warning"
+              : "valid",
+    );
+
+    const networkState = $derived<FieldState>(
+        portState === "invalid" || maxPlayersInvalid
+            ? "invalid"
+            : portState === "warning"
+              ? "warning"
+              : "valid",
+    );
+
+    const artifactState = $derived<FieldState>(
+        selectedArtifactBroken
+            ? "invalid"
+            : !artifactVersion
+              ? "empty"
+              : selectedArtifactInstalled
+                ? "valid"
+                : "pending",
+    );
+
+    /** Tailwind classes for the small status dot per field state. */
+    const dotClass: Record<FieldState, string> = {
+        empty: "bg-muted-foreground/30",
+        valid: "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.55)]",
+        invalid: "bg-destructive shadow-[0_0_6px_rgba(239,68,68,0.55)]",
+        pending: "bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.55)]",
+        warning: "bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.6)]",
+    };
+
+    /** Hard errors — submit is completely blocked while any of these are true. */
+    const hasBlockingError = $derived(
+        nameState !== "valid" ||
+            licenseState === "invalid" ||
+            networkState === "invalid" ||
+            artifactState === "invalid" ||
+            artifactState === "empty",
+    );
+
+    /** Soft warning — submit is allowed on a second, deliberate click. */
+    const hasWarning = $derived(networkState === "warning");
+
+    /** Everything fully green — just for the bottom-row "Ready" status copy. */
+    const allValid = $derived(!hasBlockingError && !hasWarning);
+
+    /**
+     * Tracks whether the user has seen one shake-rejection and clicked again.
+     * Reset to false whenever the port changes so a fresh conflict has to be
+     * acknowledged again.
+     */
+    let portConflictAcknowledged = $state(false);
+    let submitShaking = $state(false);
+
+    $effect((): void => {
+        portInput;
+        portConflictAcknowledged = false;
     });
 
     let creationPhase = $state<CreationPhase>("idle");
@@ -305,10 +382,6 @@
             toast.error(`Port must be between ${MIN_PORT} and ${MAX_PORT}`);
             return;
         }
-        if (portConflictOwner) {
-            toast.error(`Port ${portValue} is already used by ${portConflictOwner}`);
-            return;
-        }
         if (Number.isNaN(maxPlayersValue)) {
             toast.error("Enter a max player count");
             return;
@@ -316,6 +389,19 @@
         if (maxPlayersOutOfRange) {
             toast.error(
                 `Max players must be between ${MIN_MAX_PLAYERS} and ${MAX_MAX_PLAYERS}`,
+            );
+            return;
+        }
+        // Soft warning: port is already taken. First click shakes to confirm
+        // the user sees it; second click within the same edit proceeds.
+        if (portConflictOwner && !portConflictAcknowledged) {
+            submitShaking = true;
+            window.setTimeout((): void => {
+                submitShaking = false;
+            }, 450);
+            portConflictAcknowledged = true;
+            toast.warning(
+                `Port ${portValue} is used by ${portConflictOwner}. Click Create again to proceed anyway.`,
             );
             return;
         }
@@ -369,133 +455,145 @@
     </p>
 </div>
 
-<!-- Server name -->
-<section class="mb-8">
-    <h2 class="mb-3 flex items-center gap-2 text-xs font-semibold tracking-widest text-muted-foreground/60 uppercase">
-        <Server size={14} />
-        Server Name
-    </h2>
-    <div class="rounded-lg border border-border bg-card p-4">
-        <input
-            id="server-name"
-            bind:value={serverName}
-            type="text"
-            maxlength="64"
-            placeholder="RunFive RP"
-            class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/40 focus:border-primary/50"
-        />
-        <p class="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground/60">
-            <span>Folder:</span>
-            <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground/70">servers/{folderPreview}/</code>
-        </p>
-    </div>
-</section>
-
-<!-- License key -->
-<section class="mb-8">
-    <h2 class="mb-3 flex items-center gap-2 text-xs font-semibold tracking-widest text-muted-foreground/60 uppercase">
-        <KeyRound size={14} />
-        License Key
-        <span class="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium tracking-normal text-muted-foreground/70 normal-case">
-            Optional
-        </span>
-    </h2>
-    <div class="rounded-lg border border-border bg-card p-4">
-        <input
-            id="license-key"
-            bind:value={licenseKey}
-            type="text"
-            autocomplete="off"
-            spellcheck="false"
-            placeholder="cfxk_..."
-            class="h-10 w-full rounded-md border bg-background px-3 font-mono text-sm text-foreground outline-none transition-colors placeholder:font-sans placeholder:text-muted-foreground/40 focus:border-primary/50 {licenseKeyInvalid
-                ? 'border-destructive/50'
-                : 'border-border'}"
-        />
-        {#if licenseKeyInvalid}
-            <p class="mt-2 flex items-center gap-1.5 text-[11px] text-destructive/80">
-                <TriangleAlert size={11} class="shrink-0" />
-                <span>Keys from keymaster always start with <code class="rounded bg-destructive/10 px-1 font-mono text-[10px]">cfxk_</code></span>
+<!-- Unified config card: four field groups, two-column layout with status dots. -->
+<div class="mb-6 rounded-xl border border-border bg-card">
+    <!-- Server name -->
+    <div class="grid grid-cols-1 gap-5 p-5 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+        <div class="flex items-start gap-2.5">
+            <span class="mt-[7px] h-2 w-2 shrink-0 rounded-full {dotClass[nameState]}" aria-hidden="true"></span>
+            <div class="min-w-0">
+                <label for="server-name" class="block text-sm font-medium text-foreground">
+                    Server name
+                </label>
+                <p class="mt-1 text-[12px] leading-snug text-muted-foreground/70">
+                    Shows up in the panel and becomes the folder slug on disk.
+                </p>
+            </div>
+        </div>
+        <div>
+            <input
+                id="server-name"
+                bind:value={serverName}
+                type="text"
+                maxlength="64"
+                placeholder="RunFive RP"
+                class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/40 focus:border-primary/50"
+            />
+            <p class="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground/60">
+                <span>Folder</span>
+                <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground/70">servers/{folderPreview}/</code>
             </p>
-        {:else}
-            <p class="mt-2 text-[11px] text-muted-foreground/60">
-                Encrypted at rest and only decrypted when fxserver boots. Leave empty to add later.
-            </p>
-        {/if}
-
-        <div class="mt-3 flex items-center justify-between gap-2 border-t border-border/50 pt-3 text-[11px] text-muted-foreground/60">
-            <span>Don't have one yet?</span>
-            <a
-                href="https://keymaster.fivem.net/"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="inline-flex shrink-0 items-center gap-1 text-muted-foreground/60 transition-colors hover:text-foreground"
-            >
-                Open keymaster
-                <ExternalLink size={10} />
-            </a>
         </div>
     </div>
-</section>
 
-<!-- Network -->
-<section class="mb-8">
-    <h2 class="mb-3 flex items-center gap-2 text-xs font-semibold tracking-widest text-muted-foreground/60 uppercase">
-        <Network size={14} />
-        Network
-    </h2>
-    <div class="rounded-lg border border-border bg-card p-4">
-        <div class="grid grid-cols-2 gap-3">
-            <!-- Port -->
-            <div>
-                <label
-                    for="server-port"
-                    class="mb-1.5 block text-[10px] font-semibold tracking-widest text-muted-foreground/50 uppercase"
+    <div class="border-t border-border/60"></div>
+
+    <!-- License key -->
+    <div class="grid grid-cols-1 gap-5 p-5 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+        <div class="flex items-start gap-2.5">
+            <span class="mt-[7px] h-2 w-2 shrink-0 rounded-full {dotClass[licenseState]}" aria-hidden="true"></span>
+            <div class="min-w-0">
+                <div class="flex items-baseline gap-2">
+                    <label for="license-key" class="text-sm font-medium text-foreground">
+                        License key
+                    </label>
+                    <span class="text-[11px] text-muted-foreground/60">Optional</span>
+                </div>
+                <p class="mt-1 text-[12px] leading-snug text-muted-foreground/70">
+                    Cfx.re key, encrypted by the panel before it touches disk.
+                </p>
+            </div>
+        </div>
+        <div>
+            <input
+                id="license-key"
+                bind:value={licenseKey}
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="cfxk_..."
+                class="h-10 w-full rounded-md border bg-background px-3 font-mono text-sm text-foreground outline-none transition-colors placeholder:font-sans placeholder:text-muted-foreground/40 focus:border-primary/50 {licenseKeyInvalid
+                    ? 'border-destructive/50'
+                    : 'border-border'}"
+            />
+            <div class="mt-1.5 flex items-center justify-between gap-2 text-[11px]">
+                {#if licenseKeyInvalid}
+                    <p class="flex items-center gap-1.5 text-destructive/80">
+                        <TriangleAlert size={11} class="shrink-0" />
+                        <span>Must start with <code class="rounded bg-destructive/10 px-1 font-mono text-[10px]">cfxk_</code></span>
+                    </p>
+                {:else}
+                    <p class="text-muted-foreground/60">Leave empty to add later.</p>
+                {/if}
+                <a
+                    href="https://keymaster.fivem.net/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="inline-flex shrink-0 items-center gap-1 text-muted-foreground/60 transition-colors hover:text-foreground"
                 >
+                    Open keymaster
+                    <ExternalLink size={10} />
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="border-t border-border/60"></div>
+
+    <!-- Network -->
+    <div class="grid grid-cols-1 gap-5 p-5 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+        <div class="flex items-start gap-2.5">
+            <span class="mt-[7px] h-2 w-2 shrink-0 rounded-full {dotClass[networkState]}" aria-hidden="true"></span>
+            <div class="min-w-0">
+                <label class="block text-sm font-medium text-foreground">Network</label>
+                <p class="mt-1 text-[12px] leading-snug text-muted-foreground/70">
+                    TCP/UDP endpoint port and server slot count.
+                </p>
+            </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+            <div>
+                <label for="server-port" class="mb-1 block text-[11px] font-medium text-muted-foreground/70">
                     Port
                 </label>
                 <input
                     id="server-port"
                     bind:value={portInput}
-                    type="number"
+                    type="text"
                     inputmode="numeric"
-                    min={MIN_PORT}
-                    max={MAX_PORT}
+                    pattern="[0-9]*"
                     placeholder={String(nextFreePort)}
-                    class="no-spin h-10 w-full rounded-md border bg-background px-3 font-mono text-sm text-foreground outline-none transition-colors placeholder:font-sans placeholder:text-muted-foreground/40 focus:border-primary/50 {portInvalid
+                    class="no-spin h-10 w-full rounded-md border bg-background px-3 font-mono text-sm text-foreground outline-none transition-colors placeholder:font-sans placeholder:text-muted-foreground/40 focus:border-primary/50 {portOutOfRange ||
+                    Number.isNaN(portValue)
                         ? 'border-destructive/50'
-                        : 'border-border'}"
+                        : portConflictOwner
+                          ? 'border-amber-500/60'
+                          : 'border-border'}"
                 />
                 {#if portConflictOwner}
-                    <p class="mt-1.5 flex items-center gap-1 text-[11px] text-destructive/80">
+                    <p class="mt-1.5 flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-500">
                         <TriangleAlert size={10} class="shrink-0" />
                         <span class="truncate">Used by <span class="font-medium">{portConflictOwner}</span></span>
                     </p>
                 {:else if portOutOfRange}
                     <p class="mt-1.5 flex items-center gap-1 text-[11px] text-destructive/80">
                         <TriangleAlert size={10} class="shrink-0" />
-                        <span>Out of range ({MIN_PORT}–{MAX_PORT})</span>
+                        <span>Out of range</span>
                     </p>
                 {:else}
-                    <p class="mt-1.5 text-[11px] text-muted-foreground/60">TCP + UDP endpoint</p>
+                    <p class="mt-1.5 text-[11px] text-muted-foreground/60">TCP + UDP</p>
                 {/if}
             </div>
-
-            <!-- Max players -->
             <div>
-                <label
-                    for="server-max-players"
-                    class="mb-1.5 block text-[10px] font-semibold tracking-widest text-muted-foreground/50 uppercase"
-                >
-                    Max Players
+                <label for="server-max-players" class="mb-1 block text-[11px] font-medium text-muted-foreground/70">
+                    Max players
                 </label>
                 <input
                     id="server-max-players"
                     bind:value={maxPlayersInput}
-                    type="number"
+                    type="text"
                     inputmode="numeric"
-                    min={MIN_MAX_PLAYERS}
-                    max={MAX_MAX_PLAYERS}
+                    pattern="[0-9]*"
                     placeholder={String(DEFAULT_MAX_PLAYERS)}
                     class="no-spin h-10 w-full rounded-md border bg-background px-3 font-mono text-sm text-foreground outline-none transition-colors placeholder:font-sans placeholder:text-muted-foreground/40 focus:border-primary/50 {maxPlayersInvalid
                         ? 'border-destructive/50'
@@ -504,23 +602,41 @@
                 {#if maxPlayersOutOfRange}
                     <p class="mt-1.5 flex items-center gap-1 text-[11px] text-destructive/80">
                         <TriangleAlert size={10} class="shrink-0" />
-                        <span>Out of range ({MIN_MAX_PLAYERS}–{MAX_MAX_PLAYERS})</span>
+                        <span>Out of range</span>
                     </p>
                 {:else}
-                    <p class="mt-1.5 text-[11px] text-muted-foreground/60">Slot count (sv_maxclients)</p>
+                    <p class="mt-1.5 text-[11px] text-muted-foreground/60">sv_maxclients</p>
                 {/if}
             </div>
         </div>
     </div>
-</section>
 
-<!-- Artifact build -->
-<section class="mb-8">
-    <h2 class="mb-3 flex items-center gap-2 text-xs font-semibold tracking-widest text-muted-foreground/60 uppercase">
-        <HardDriveDownload size={14} />
-        Artifact Build
-    </h2>
-    <div class="rounded-lg border border-border bg-card p-4">
+    <div class="border-t border-border/60"></div>
+
+    <!-- Artifact build -->
+    <div class="grid grid-cols-1 gap-5 p-5 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+        <div class="flex items-start gap-2.5">
+            <span class="mt-[7px] h-2 w-2 shrink-0 rounded-full {dotClass[artifactState]}" aria-hidden="true"></span>
+            <div class="min-w-0">
+                <label class="block text-sm font-medium text-foreground">Artifact build</label>
+                <p class="mt-1 text-[12px] leading-snug text-muted-foreground/70">
+                    fxserver runtime. Missing builds are downloaded before the server is created.
+                </p>
+                {#if artifactsQuery.data}
+                    <p class="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground/60">
+                        {#if hostOs === "windows"}
+                            <WindowsIcon class="h-3 w-3 text-primary" />
+                        {:else if hostOs === "linux"}
+                            <LinuxIcon class="h-3 w-3 text-primary" />
+                        {/if}
+                        <span class="font-medium text-foreground/80">{hostOsLabel}</span>
+                        <span class="text-muted-foreground/30">·</span>
+                        <span>{installedArtifacts.length} installed</span>
+                    </p>
+                {/if}
+            </div>
+        </div>
+        <div>
         {#if artifactsQuery.isPending}
             <div class="flex h-10 items-center gap-2 text-sm text-muted-foreground/60">
                 <LoaderCircle size={14} class="animate-spin" />
@@ -667,23 +783,9 @@
                 <span><span class="font-semibold">Known issue:</span> {selectedArtifactEntry.brokenReason}</span>
             </div>
         {/if}
-
-        {#if artifactsQuery.data}
-            <div class="mt-3 flex items-center gap-2 border-t border-border/50 pt-3 text-[11px] text-muted-foreground/60">
-                {#if hostOs === "windows"}
-                    <WindowsIcon class="h-3 w-3 text-primary" />
-                {:else if hostOs === "linux"}
-                    <LinuxIcon class="h-3 w-3 text-primary" />
-                {/if}
-                <span class="font-medium text-foreground/80">{hostOsLabel}</span>
-                <span class="text-muted-foreground/30">·</span>
-                <span>{installedArtifacts.length} installed</span>
-                <span class="text-muted-foreground/30">·</span>
-                <span>{artifactsQuery.data.available.length} upstream</span>
-            </div>
-        {/if}
+        </div>
     </div>
-</section>
+</div>
 
 <!-- Action row / progress panel -->
 {#if isCreatingServer}
@@ -705,19 +807,30 @@
     </div>
 {:else}
     <div class="flex items-center justify-between gap-3">
-        <p class="text-[11px] text-muted-foreground/60">
-            Missing builds are downloaded before the server is created.
+        <p class="flex items-center gap-2 text-[11px] text-muted-foreground/70">
+            <span
+                class="h-1.5 w-1.5 rounded-full {hasBlockingError
+                    ? 'bg-muted-foreground/30'
+                    : hasWarning
+                      ? 'bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.6)]'
+                      : 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.55)]'}"
+                aria-hidden="true"
+            ></span>
+            {hasBlockingError
+                ? "Complete the fields above."
+                : hasWarning
+                  ? portConflictAcknowledged
+                      ? "Port conflict acknowledged."
+                      : `Port ${portValue} is in use.`
+                  : "Ready to create."}
         </p>
         <button
             onclick={handleCreateServer}
-            disabled={artifactsQuery.isPending ||
-                !serverName.trim() ||
-                !artifactVersion ||
-                licenseKeyInvalid ||
-                portInvalid ||
-                Number.isNaN(portValue) ||
-                maxPlayersInvalid}
-            class="inline-flex shrink-0 items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={hasBlockingError || artifactsQuery.isPending}
+            class="inline-flex shrink-0 items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 {!hasBlockingError &&
+            !hasWarning
+                ? 'shadow-[0_8px_24px_-12px_hsl(var(--primary)/0.6)]'
+                : ''} {submitShaking ? 'btn-shake' : ''}"
         >
             Create Server
         </button>
@@ -747,5 +860,37 @@
     }
     .no-spin {
         -moz-appearance: textfield;
+    }
+
+    /* Confirmation shake for soft-warning submits (e.g. port already in use).
+       One cycle, then the button returns to rest and the second click goes
+       through. */
+    @keyframes btn-shake {
+        0%,
+        100% {
+            transform: translateX(0);
+        }
+        15% {
+            transform: translateX(-5px);
+        }
+        30% {
+            transform: translateX(5px);
+        }
+        45% {
+            transform: translateX(-4px);
+        }
+        60% {
+            transform: translateX(4px);
+        }
+        75% {
+            transform: translateX(-2px);
+        }
+        90% {
+            transform: translateX(2px);
+        }
+    }
+
+    :global(.btn-shake) {
+        animation: btn-shake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97);
     }
 </style>
