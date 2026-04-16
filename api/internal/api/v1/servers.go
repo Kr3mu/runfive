@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	ws "github.com/gofiber/contrib/v3/websocket"
 	"github.com/gofiber/fiber/v3"
@@ -14,6 +15,17 @@ import (
 	"github.com/runfivedev/runfive/internal/launcher"
 	"github.com/runfivedev/runfive/internal/models"
 	"github.com/runfivedev/runfive/internal/permissions"
+)
+
+const (
+	// wsPongWait is how long we'll wait for a pong from the client before
+	// treating the connection as dead. Must be larger than wsPingPeriod.
+	wsPongWait = 60 * time.Second
+	// wsPingPeriod is how often the server sends a ping frame. Should be ~60%
+	// of wsPongWait to tolerate one missed pong.
+	wsPingPeriod = 30 * time.Second
+	// wsWriteWait caps the time any single websocket write may block.
+	wsWriteWait = 10 * time.Second
 )
 
 type serverRegistry interface {
@@ -170,33 +182,47 @@ func (h *ServerHandler) Logs(c fiber.Ctx) error {
 func (h *ServerHandler) StreamLogs(conn *ws.Conn) {
 	serverID := conn.Params("serverId")
 
+	var writeMu sync.Mutex
+	writeJSON := func(payload any) error {
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		_ = conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+		return conn.WriteJSON(payload)
+	}
+	writePing := func() error {
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		return conn.WriteControl(ws.PingMessage, nil, time.Now().Add(wsWriteWait))
+	}
+
 	status, err := h.launcher.Status(serverID)
 	if err != nil {
-		_ = conn.WriteJSON(models.ServerConsoleEvent{Type: "error", Error: err.Error()})
+		_ = writeJSON(models.ServerConsoleEvent{Type: "error", Error: err.Error()})
 		return
 	}
 
 	lines, err := h.launcher.Tail(serverID, 200)
 	if err != nil {
-		_ = conn.WriteJSON(models.ServerConsoleEvent{Type: "error", Error: err.Error()})
+		_ = writeJSON(models.ServerConsoleEvent{Type: "error", Error: err.Error()})
 		return
 	}
 
 	subscription, err := h.launcher.Subscribe(serverID)
 	if err != nil {
-		_ = conn.WriteJSON(models.ServerConsoleEvent{Type: "error", Error: err.Error()})
+		_ = writeJSON(models.ServerConsoleEvent{Type: "error", Error: err.Error()})
 		return
 	}
 	defer subscription.Close()
 
-	canExecute, _ := conn.Locals("consoleCanExecute").(bool)
+	// Drop half-open connections: the read loop below resets the deadline on
+	// every pong, so a client that stops ponging will trip ReadJSON with an
+	// i/o timeout and the handler unwinds cleanly.
+	_ = conn.SetReadDeadline(time.Now().Add(wsPongWait))
+	conn.SetPongHandler(func(string) error {
+		return conn.SetReadDeadline(time.Now().Add(wsPongWait))
+	})
 
-	var writeMu sync.Mutex
-	writeJSON := func(payload any) error {
-		writeMu.Lock()
-		defer writeMu.Unlock()
-		return conn.WriteJSON(payload)
-	}
+	canExecute, _ := conn.Locals("consoleCanExecute").(bool)
 
 	if err := writeJSON(models.ServerConsoleEvent{
 		Type:   "snapshot",
@@ -209,6 +235,8 @@ func (h *ServerHandler) StreamLogs(conn *ws.Conn) {
 	done := make(chan struct{})
 	defer close(done)
 
+	// Broadcast goroutine: forwards subscription events until the handler
+	// returns (close(done)) or the subscription channel is closed.
 	go func() {
 		for {
 			select {
@@ -219,6 +247,23 @@ func (h *ServerHandler) StreamLogs(conn *ws.Conn) {
 					return
 				}
 				if err := writeJSON(event); err != nil {
+					return
+				}
+			}
+		}
+	}()
+
+	// Ping goroutine: keeps NAT/proxy state warm and detects dead peers by
+	// letting the pong handler reset the read deadline.
+	go func() {
+		ticker := time.NewTicker(wsPingPeriod)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				if err := writePing(); err != nil {
 					return
 				}
 			}
@@ -263,6 +308,8 @@ func launcherHTTPError(err error) error {
 		return fiber.NewError(fiber.StatusConflict, err.Error())
 	case errors.Is(err, launcher.ErrNotRunning):
 		return fiber.NewError(fiber.StatusConflict, err.Error())
+	case errors.Is(err, launcher.ErrStopFailed):
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	default:
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
