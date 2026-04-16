@@ -20,6 +20,8 @@
     import ChevronDown from "@lucide/svelte/icons/chevron-down";
     import Sparkles from "@lucide/svelte/icons/sparkles";
     import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
+    import KeyRound from "@lucide/svelte/icons/key-round";
+    import ExternalLink from "@lucide/svelte/icons/external-link";
     import { toast } from "svelte-sonner";
 
     interface Props {
@@ -54,6 +56,11 @@
 
     let serverName = $state("");
     let artifactVersion = $state("");
+    let licenseKey = $state("");
+
+    const licenseKeyInvalid = $derived(
+        licenseKey.trim().length > 0 && !licenseKey.trim().startsWith("cfxk_"),
+    );
 
     let creationPhase = $state<CreationPhase>("idle");
     let phaseStartedAt = $state<number | null>(null);
@@ -213,6 +220,10 @@
             toast.error("Choose an artifact build first");
             return;
         }
+        if (licenseKeyInvalid) {
+            toast.error("License key must start with cfxk_");
+            return;
+        }
 
         try {
             if (!selectedArtifactInstalled) {
@@ -222,13 +233,16 @@
             }
 
             beginPhase("creating");
+            const trimmedKey: string = licenseKey.trim();
             const created: ManagedServer = await createServer({
                 name: serverName.trim(),
                 artifactVersion,
+                ...(trimmedKey ? { licenseKey: trimmedKey } : {}),
             });
 
             serverState.select(created.id);
             serverName = "";
+            licenseKey = "";
 
             await Promise.all([
                 queryClient.invalidateQueries({ queryKey: ["servers"] }),
@@ -275,6 +289,53 @@
             <span>Folder:</span>
             <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground/70">servers/{folderPreview}/</code>
         </p>
+    </div>
+</section>
+
+<!-- License key -->
+<section class="mb-8">
+    <h2 class="mb-3 flex items-center gap-2 text-xs font-semibold tracking-widest text-muted-foreground/60 uppercase">
+        <KeyRound size={14} />
+        License Key
+        <span class="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium tracking-normal text-muted-foreground/70 normal-case">
+            Optional
+        </span>
+    </h2>
+    <div class="rounded-lg border border-border bg-card p-4">
+        <input
+            id="license-key"
+            bind:value={licenseKey}
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="cfxk_..."
+            class="h-10 w-full rounded-md border bg-background px-3 font-mono text-sm text-foreground outline-none transition-colors placeholder:font-sans placeholder:text-muted-foreground/40 focus:border-primary/50 {licenseKeyInvalid
+                ? 'border-destructive/50'
+                : 'border-border'}"
+        />
+        {#if licenseKeyInvalid}
+            <p class="mt-2 flex items-center gap-1.5 text-[11px] text-destructive/80">
+                <TriangleAlert size={11} class="shrink-0" />
+                <span>Keys from keymaster always start with <code class="rounded bg-destructive/10 px-1 font-mono text-[10px]">cfxk_</code></span>
+            </p>
+        {:else}
+            <p class="mt-2 text-[11px] text-muted-foreground/60">
+                Encrypted at rest and only decrypted when fxserver boots. Leave empty to add later.
+            </p>
+        {/if}
+
+        <div class="mt-3 flex items-center justify-between gap-2 border-t border-border/50 pt-3 text-[11px] text-muted-foreground/60">
+            <span>Don't have one yet?</span>
+            <a
+                href="https://keymaster.fivem.net/"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex shrink-0 items-center gap-1 text-muted-foreground/60 transition-colors hover:text-foreground"
+            >
+                Open keymaster
+                <ExternalLink size={10} />
+            </a>
+        </div>
     </div>
 </section>
 
@@ -474,7 +535,7 @@
         </p>
         <button
             onclick={handleCreateServer}
-            disabled={artifactsQuery.isPending || !serverName.trim() || !artifactVersion}
+            disabled={artifactsQuery.isPending || !serverName.trim() || !artifactVersion || licenseKeyInvalid}
             class="inline-flex shrink-0 items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
         >
             Create Server

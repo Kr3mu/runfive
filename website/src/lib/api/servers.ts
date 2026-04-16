@@ -33,8 +33,12 @@ export interface ManagedServer {
 }
 
 export interface CreateServerRequest {
+    /** Human-readable server name. */
     name: string;
+    /** FiveM artifact build the server will launch against. */
     artifactVersion: string;
+    /** Optional Cfx.re license key (cfxk_...). Encrypted server-side. */
+    licenseKey?: string;
 }
 
 export interface ServerProcessStatus {
