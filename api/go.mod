@@ -5,6 +5,7 @@ go 1.26.1
 require (
 	github.com/andybalholm/brotli v1.2.1
 	github.com/fsnotify/fsnotify v1.9.0
+	github.com/gofiber/contrib/v3/websocket v1.1.0
 	github.com/gofiber/fiber/v3 v3.1.0
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
@@ -21,7 +22,6 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fasthttp/websocket v1.5.12 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.1 // indirect
-	github.com/gofiber/contrib/v3/websocket v1.1.0 // indirect
 	github.com/gofiber/schema v1.7.0 // indirect
 	github.com/gofiber/utils/v2 v2.0.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
