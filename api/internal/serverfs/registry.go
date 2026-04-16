@@ -160,15 +160,15 @@ func (r *Registry) Reload() error {
 			continue
 		}
 
+		// Only the later-scanned entry is marked invalid on a port collision.
+		// os.ReadDir returns entries in lexical order, so the first-alphabetical
+		// server keeps its slot — operators can then rename or delete the
+		// duplicate without their working server getting demoted along with it.
 		if cfg.Network.Port > 0 {
 			if other, clash := portOwners[cfg.Network.Port]; clash {
 				reason := fmt.Sprintf("port %d already claimed by %q", cfg.Network.Port, other)
 				log.Printf("[serverfs] %s: %s", id, reason)
 				next[id] = &entry{id: id, config: cfg, invalid: true, reason: reason}
-				if existing, ok := next[other]; ok {
-					existing.invalid = true
-					existing.reason = fmt.Sprintf("port %d also claimed by %q", cfg.Network.Port, id)
-				}
 				continue
 			}
 			portOwners[cfg.Network.Port] = id
@@ -437,11 +437,17 @@ func (r *Registry) Create(name, artifactVersion, licenseKey string, port, maxPla
 		return models.ManagedServer{}, fmt.Errorf("reload after create: %w", err)
 	}
 
-	srv, ok := r.Get(dirID)
+	// Surface the new entry even if the reload immediately flagged it as
+	// invalid (e.g. a deliberate port-collision override). The HTTP caller
+	// still wants a success response; the invalid reason will show up in
+	// the next List() call so the operator can act on it.
+	r.mu.RLock()
+	e, ok := r.entries[dirID]
+	r.mu.RUnlock()
 	if !ok {
 		return models.ManagedServer{}, fmt.Errorf("server %s missing from cache after create", dirID)
 	}
-	return srv, nil
+	return toManagedServer(e), nil
 }
 
 // encryptLicense converts a plaintext Cfx.re key to the base64 AES-GCM blob
@@ -546,20 +552,17 @@ func (r *Registry) allocatePort() int {
 	return defaultBasePort
 }
 
-// resolvePort validates a caller-supplied port (range + conflict) or falls
-// back to allocatePort when port is zero. Returned errors are safe to surface
-// to the HTTP handler as 400-class messages.
+// resolvePort validates a caller-supplied port (range only) or falls back to
+// allocatePort when port is zero. Port collisions are NOT rejected here —
+// the UI warns the operator and requires an explicit second click to
+// acknowledge the conflict; the reload pass downgrades the later entry to
+// invalid so the duplicate is still visibly flagged in the dashboard.
 func (r *Registry) resolvePort(port int) (int, error) {
 	if port == 0 {
 		return r.allocatePort(), nil
 	}
 	if port < minUserPort || port > maxUserPort {
 		return 0, fmt.Errorf("port %d is outside the allowed range %d-%d", port, minUserPort, maxUserPort)
-	}
-
-	taken := r.takenPorts()
-	if owner, clash := taken[port]; clash {
-		return 0, fmt.Errorf("port %d is already claimed by %q", port, owner)
 	}
 	return port, nil
 }
