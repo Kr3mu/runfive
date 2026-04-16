@@ -177,7 +177,7 @@ func (r *Registry) Reload() error {
 			continue
 		}
 		serverDir := filepath.Join(r.rootDir, id)
-		if err := writeGeneratedServerCfg(serverDir, &e.config, r.dec); err != nil {
+		if err := writeGeneratedServerCfg(id, serverDir, &e.config, r.dec); err != nil {
 			log.Printf("[serverfs] %s: generate server.cfg: %v", id, err)
 		}
 	}
@@ -229,6 +229,8 @@ func (r *Registry) addSubdirWatches(w *fsnotify.Watcher) {
 func (r *Registry) watchLoop(ctx context.Context, w *fsnotify.Watcher) {
 	defer func() { _ = w.Close() }()
 
+	rootClean := filepath.Clean(r.rootDir)
+
 	var pending *time.Timer
 	trigger := func() {
 		if err := r.Reload(); err != nil {
@@ -246,7 +248,7 @@ func (r *Registry) watchLoop(ctx context.Context, w *fsnotify.Watcher) {
 			if !ok {
 				return
 			}
-			if ev.Op == fsnotify.Chmod {
+			if !isRelevantEvent(ev, rootClean) {
 				continue
 			}
 			if pending != nil {
@@ -260,6 +262,26 @@ func (r *Registry) watchLoop(ctx context.Context, w *fsnotify.Watcher) {
 			log.Printf("[serverfs] watcher error: %v", err)
 		}
 	}
+}
+
+// isRelevantEvent drops fsnotify noise produced by fxserver at runtime —
+// cache files, logs, lockfiles inside a server directory. We only want to
+// reload when a server.toml actually changes or when a server subdirectory
+// is added/removed at the root.
+func isRelevantEvent(ev fsnotify.Event, rootClean string) bool {
+	if ev.Op == fsnotify.Chmod {
+		return false
+	}
+	if strings.HasSuffix(ev.Name, ".toml") {
+		return true
+	}
+	// Top-level Create/Remove/Rename = a server directory appeared or
+	// disappeared. We still need to reload so the watch list stays in sync.
+	if filepath.Dir(ev.Name) == rootClean &&
+		(ev.Has(fsnotify.Create) || ev.Has(fsnotify.Remove) || ev.Has(fsnotify.Rename)) {
+		return true
+	}
+	return false
 }
 
 // List returns a sorted snapshot of valid entries in API-facing form.
