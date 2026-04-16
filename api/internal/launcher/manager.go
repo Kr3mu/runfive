@@ -268,6 +268,20 @@ func (m *Manager) Subscribe(id string) (*Subscription, error) {
 	return runtime.subscribe(), nil
 }
 
+// Warn appends a non-fatal warning to the server's console stream. Safe to
+// call for unknown server IDs (the warning is simply dropped) so the caller
+// doesn't need to pre-check. Used by the serverfs registry to surface
+// sanitizer rejections to the panel console.
+func (m *Manager) Warn(id, message string) {
+	m.mu.RLock()
+	runtime, ok := m.servers[id]
+	m.mu.RUnlock()
+	if !ok {
+		return
+	}
+	runtime.appendWarning(message)
+}
+
 // SendCommand forwards one line of console input to the running server.
 func (m *Manager) SendCommand(id, command string) error {
 	runtime, err := m.ensureRuntime(id)
@@ -518,6 +532,14 @@ func (r *serverRuntime) appendCommand(command string) {
 
 func (r *serverRuntime) appendSystem(message string) {
 	line := r.logs.add("system", message)
+	r.broadcast(models.ServerConsoleEvent{
+		Type: "line",
+		Line: &line,
+	})
+}
+
+func (r *serverRuntime) appendWarning(message string) {
+	line := r.logs.add("warning", message)
 	r.broadcast(models.ServerConsoleEvent{
 		Type: "line",
 		Line: &line,

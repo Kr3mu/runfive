@@ -113,6 +113,7 @@ func main() {
 	serverRegistry.StartWatcher(lifecycleCtx)
 
 	launcherManager := launcher.NewManager(serverRegistry, artifactManager)
+	serverRegistry.SetWarningHandler(launcherManager.Warn)
 
 	setupTokenStore := auth.NewSetupTokenStore()
 	var userCount int64

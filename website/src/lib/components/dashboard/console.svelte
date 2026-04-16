@@ -158,6 +158,7 @@
 
     function lineLevel(line: ServerLogLine): LogLevel {
         if (line.stream === "stderr") return "error";
+        if (line.stream === "warning") return "warn";
         if (line.stream === "stdin") return "command";
         if (line.stream === "system") return "debug";
         return "info";

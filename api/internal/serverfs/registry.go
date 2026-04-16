@@ -87,6 +87,12 @@ type entry struct {
 	reason  string
 }
 
+// WarningHandler receives non-fatal messages produced while rendering the
+// generated server.cfg (e.g. a TOML value was rejected by the sanitizer).
+// The handler runs synchronously from the reload goroutine and MUST NOT
+// block or call back into the Registry, or it will deadlock the reload.
+type WarningHandler func(serverID, message string)
+
 // Registry manages the file-backed set of server configurations and keeps an
 // in-memory cache in sync via an fsnotify watcher.
 type Registry struct {
@@ -94,8 +100,10 @@ type Registry struct {
 	artifacts artifactLookup
 	dec       FieldDecryptor
 
-	mu      sync.RWMutex
-	entries map[string]*entry
+	mu       sync.RWMutex
+	entries  map[string]*entry
+	onWarn   WarningHandler
+	onWarnMu sync.RWMutex
 }
 
 // NewRegistry creates a registry rooted at rootDir and performs an initial
@@ -177,12 +185,34 @@ func (r *Registry) Reload() error {
 			continue
 		}
 		serverDir := filepath.Join(r.rootDir, id)
-		if err := writeGeneratedServerCfg(id, serverDir, &e.config, r.dec); err != nil {
+		warnings, err := writeGeneratedServerCfg(serverDir, &e.config, r.dec)
+		if err != nil {
 			log.Printf("[serverfs] %s: generate server.cfg: %v", id, err)
+		}
+		for _, w := range warnings {
+			log.Printf("[serverfs] %s: %s", id, w)
+			r.emitWarning(id, w)
 		}
 	}
 
 	return nil
+}
+
+// SetWarningHandler installs a callback invoked once per non-fatal
+// server.cfg rendering warning. Pass nil to clear. Safe to call at any time.
+func (r *Registry) SetWarningHandler(fn WarningHandler) {
+	r.onWarnMu.Lock()
+	r.onWarn = fn
+	r.onWarnMu.Unlock()
+}
+
+func (r *Registry) emitWarning(serverID, message string) {
+	r.onWarnMu.RLock()
+	fn := r.onWarn
+	r.onWarnMu.RUnlock()
+	if fn != nil {
+		fn(serverID, message)
+	}
 }
 
 // StartWatcher begins watching the servers directory in a goroutine. Events
