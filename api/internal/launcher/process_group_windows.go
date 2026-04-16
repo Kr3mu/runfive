@@ -3,12 +3,19 @@
 package launcher
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
+
+// taskkillTimeout bounds how long we wait for the taskkill child before we
+// consider the kill attempt itself stuck. The caller already wraps this in a
+// larger Stop() budget, so this just prevents a runaway taskkill process.
+const taskkillTimeout = 5 * time.Second
 
 func newProcessGroupAttr() *syscall.SysProcAttr {
 	return &syscall.SysProcAttr{CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP}
@@ -34,8 +41,11 @@ func taskkill(pid int, force bool) error {
 		args = append(args, "/F")
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), taskkillTimeout)
+	defer cancel()
+
 	//nolint:gosec // arguments are constructed from an integer PID and static flags.
-	cmd := exec.Command("taskkill", args...)
+	cmd := exec.CommandContext(ctx, "taskkill", args...)
 	output, err := cmd.CombinedOutput()
 	if err == nil {
 		return nil
