@@ -71,9 +71,9 @@ func (h *ServerHandler) List(c fiber.Ctx) error {
 	perms := auth.GetPermissions(c)
 	if perms != nil && !perms.IsOwner {
 		filtered := make([]models.ManagedServer, 0, len(servers))
-		for _, server := range servers {
-			if _, ok := perms.Servers[server.ID]; ok {
-				filtered = append(filtered, server)
+		for i := range servers {
+			if _, ok := perms.Servers[servers[i].ID]; ok {
+				filtered = append(filtered, servers[i])
 			}
 		}
 		servers = filtered

@@ -545,7 +545,7 @@
         <div class="flex items-start gap-2.5">
             <span class="mt-[7px] h-2 w-2 shrink-0 rounded-full {dotClass[networkState]}" aria-hidden="true"></span>
             <div class="min-w-0">
-                <label class="block text-sm font-medium text-foreground">Network</label>
+                <div class="block text-sm font-medium text-foreground">Network</div>
                 <p class="mt-1 text-[12px] leading-snug text-muted-foreground/70">
                     TCP/UDP endpoint port and server slot count.
                 </p>
@@ -618,7 +618,7 @@
         <div class="flex items-start gap-2.5">
             <span class="mt-[7px] h-2 w-2 shrink-0 rounded-full {dotClass[artifactState]}" aria-hidden="true"></span>
             <div class="min-w-0">
-                <label class="block text-sm font-medium text-foreground">Artifact build</label>
+                <div class="block text-sm font-medium text-foreground">Artifact build</div>
                 <p class="mt-1 text-[12px] leading-snug text-muted-foreground/70">
                     fxserver runtime. Missing builds are downloaded before the server is created.
                 </p>
