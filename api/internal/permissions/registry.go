@@ -53,10 +53,15 @@ const (
 var AllGlobalResources = []string{GlobalUsers, GlobalRoles, GlobalServers, GlobalSettings}
 
 // GlobalResourceSchema maps each global resource to its action schema.
+//
+// GlobalServers.update grants a platform-wide operator the ability to edit any
+// server's config without holding a per-server role. Day-to-day config edits
+// are expected to flow through the per-server ServerSettings resource instead
+// so blast radius stays bounded.
 var GlobalResourceSchema = map[string]ResourceSchema{
 	GlobalUsers:    {CRUD: []string{ActionCreate, ActionRead, ActionUpdate, ActionDelete}},
 	GlobalRoles:    {CRUD: []string{ActionCreate, ActionRead, ActionUpdate, ActionDelete}},
-	GlobalServers:  {CRUD: []string{ActionCreate, ActionDelete}},
+	GlobalServers:  {CRUD: []string{ActionCreate, ActionUpdate, ActionDelete}},
 	GlobalSettings: {CRUD: []string{ActionRead, ActionUpdate}},
 }
 
@@ -70,17 +75,23 @@ const (
 	ServerPlayers   = "players"
 	ServerConsole   = "console"
 	ServerBans      = "bans"
+	ServerSettings  = "settings"
 )
 
 // AllServerResources is the canonical list of server resources.
-var AllServerResources = []string{ServerDashboard, ServerPlayers, ServerConsole, ServerBans}
+var AllServerResources = []string{ServerDashboard, ServerPlayers, ServerConsole, ServerBans, ServerSettings}
 
 // ServerResourceSchema maps each server resource to its action schema.
+//
+// ServerSettings covers the per-server server.toml. update lets an operator
+// edit their own server's config; delete is deliberately absent — deleting a
+// server is a platform-level action and lives on GlobalServers.delete.
 var ServerResourceSchema = map[string]ResourceSchema{
 	ServerDashboard: {CRUD: []string{ActionRead}},
 	ServerPlayers:   {CRUD: []string{ActionCreate, ActionRead, ActionUpdate, ActionDelete}, Sub: []string{ActionKick, ActionWarn}},
 	ServerConsole:   {CRUD: []string{ActionRead}, Sub: []string{ActionExecute}},
 	ServerBans:      {CRUD: []string{ActionCreate, ActionRead, ActionUpdate, ActionDelete}},
+	ServerSettings:  {CRUD: []string{ActionRead, ActionUpdate}},
 }
 
 // ServerResourceActions is a flat map for backward compatibility with middleware.
