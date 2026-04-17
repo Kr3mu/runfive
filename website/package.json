@@ -14,13 +14,17 @@
     "@fontsource-variable/figtree": "^5.2.10",
     "@fontsource-variable/noto-sans": "^5.2.10",
     "@internationalized/date": "^3.12.0",
+    "@tanstack/svelte-query": "^6.1.13",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-search": "^0.16.0",
+    "@xterm/addon-web-links": "^0.12.0",
+    "@xterm/xterm": "^6.0.0",
     "bits-ui": "^2.16.3",
     "clsx": "^2.1.1",
+    "gridstack": "^12.5.0",
     "sv-router": "^0.15.0",
     "tailwind-merge": "^3.5.0",
-    "tw-animate-css": "^1.4.0",
-    "gridstack": "^12.5.0",
-    "@tanstack/svelte-query": "^6.1.13"
+    "tw-animate-css": "^1.4.0"
   },
   "devDependencies": {
     "@lucide/svelte": "^1.8.0",
