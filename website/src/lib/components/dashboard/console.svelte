@@ -79,6 +79,41 @@
     let term: Terminal | null = null;
     let fitAddon: FitAddon | null = null;
     let searchAddon: SearchAddon | null = null;
+    /**
+     * Bumps every time a new Terminal is mounted. Pending write-callback
+     * chains capture the generation they were started under and bail if it
+     * no longer matches — without this, a chain that fired after dispose()
+     * would hit a torn-down buffer/renderer and crash the whole widget.
+     */
+    let termGen = 0;
+    /**
+     * Bumps every time replaceBuffer is called, so a new bulk replay
+     * supersedes any chain still walking through the previous batch.
+     */
+    let replayGen = 0;
+
+    function termAlive(capturedGen: number): boolean {
+        return term !== null && termGen === capturedGen;
+    }
+
+    function replayValid(capturedTermGen: number, capturedReplayGen: number): boolean {
+        return termAlive(capturedTermGen) && replayGen === capturedReplayGen;
+    }
+
+    /**
+     * scrollToBottom can hit the renderer before it has measured the
+     * terminal for the first time (e.g. during initial mount or a tab
+     * that was hidden when the component first rendered), which throws
+     * on the internal `dimensions` getter. The autoscroll state survives
+     * the throw so the next write naturally retries.
+     */
+    function safeScrollToBottom(t: Terminal): void {
+        try {
+            t.scrollToBottom();
+        } catch {
+            // Renderer not ready yet; skip this tick.
+        }
+    }
 
     let socketRef: WebSocket | null = null;
     let localLogID = 0;
@@ -210,100 +245,94 @@
      * DOM) means drag-to-copy never captures the timestamp — which is the
      * whole reason we can show it visibly without breaking the copy flow.
      */
-    function writeAndAnnotate(t: Terminal, line: ServerLogLine, startYBefore: number): void {
-        t.write(line.message + "\r\n", (): void => {
-            const endY = t.buffer.active.baseY + t.buffer.active.cursorY;
-            const rowsUsed = Math.max(1, endY - startYBefore);
-            const marker = t.registerMarker(-rowsUsed);
-            if (!marker) return;
-
-            const decoration = t.registerDecoration({
-                marker,
-                anchor: "left",
-                x: 0,
-                width: 1,
-                height: 1,
-                layer: "top",
-            });
-            if (!decoration) return;
-
-            decoration.onRender((el: HTMLElement): void => {
-                el.classList.add("console-timestamp-gutter");
-                el.textContent = formatTimestamp(line.timestamp);
-            });
-
-            // Drop the decoration once the marker scrolls out of the
-            // scrollback ring so xterm's DOM node pool stays bounded.
-            marker.onDispose((): void => decoration.dispose());
-        });
-    }
-
     /**
-     * Flushes any queued xterm writes and then invokes `capture`, passing
-     * the live starting Y. Used as a barrier before `writeAndAnnotate` so
-     * the captured startY reflects every prior pending write.
+     * Attaches a timestamp decoration at the first visual row of a just-
+     * written message. Called from a write callback so the buffer reflects
+     * the post-write cursor position; walks back by the actual number of
+     * rows the write consumed so wrapped lines still anchor at the top.
      */
-    function withFlushedStart(t: Terminal, run: (startY: number) => void): void {
-        t.write("", (): void => {
-            run(t.buffer.active.baseY + t.buffer.active.cursorY);
+    function attachDecoration(
+        t: Terminal,
+        timestamp: string,
+        startY: number,
+    ): void {
+        const endY = t.buffer.active.baseY + t.buffer.active.cursorY;
+        const rowsUsed = Math.max(1, endY - startY);
+        const marker = t.registerMarker(-rowsUsed);
+        if (!marker) return;
+
+        const decoration = t.registerDecoration({
+            marker,
+            anchor: "left",
+            x: 0,
+            width: 1,
+            height: 1,
+            layer: "top",
         });
+        if (!decoration) return;
+
+        decoration.onRender((el: HTMLElement): void => {
+            el.classList.add("console-timestamp-gutter");
+            el.textContent = formatTimestamp(timestamp);
+        });
+
+        // Drop the decoration once the marker scrolls out of the scrollback
+        // ring so xterm's DOM node pool stays bounded.
+        marker.onDispose((): void => decoration.dispose());
     }
 
     function writeLine(line: ServerLogLine): void {
         if (!term) return;
         const t = term;
-        withFlushedStart(t, (startY: number): void => {
-            writeAndAnnotate(t, line, startY);
+        const gen = termGen;
+
+        // Empty-write barrier captures the starting Y after any prior
+        // queued writes have been parsed, so markers don't all pile up on
+        // the same row during a burst.
+        t.write("", (): void => {
+            if (!termAlive(gen)) return;
+            const startY = t.buffer.active.baseY + t.buffer.active.cursorY;
+            t.write(line.message + "\r\n", (): void => {
+                if (!termAlive(gen)) return;
+                attachDecoration(t, line.timestamp, startY);
+                if (autoScroll) safeScrollToBottom(t);
+            });
         });
-        if (autoScroll) t.scrollToBottom();
     }
 
     function replaceBuffer(lines: ServerLogLine[]): void {
         if (!term) return;
         const t = term;
+        const gen = termGen;
+        const replay = ++replayGen;
+
         t.clear();
         rawLines = [];
         const trimmed = lines.slice(-SCROLLBACK_LINES);
         for (const line of trimmed) {
             rawLines.push(line);
         }
-        // Chain the batch through the same flush-then-write barrier so each
+
+        // Chain the batch through the flush-then-write barrier so each
         // message's startY snapshot reflects the previous write having been
-        // parsed. Doing it serially via callbacks is the only reliable way
-        // to keep marker positions in lockstep with the content for a burst
-        // of synchronous writes (the initial snapshot pushes 200 lines at
-        // once).
+        // parsed. Every callback checks both the terminal generation and
+        // the replay generation so a superseded chain or a disposed
+        // terminal aborts cleanly without touching torn-down internals.
         let i = 0;
         const step = (): void => {
+            if (!replayValid(gen, replay)) return;
             if (i >= trimmed.length) {
-                t.scrollToBottom();
+                safeScrollToBottom(t);
                 autoScroll = true;
                 return;
             }
             const current = trimmed[i++];
             t.write("", (): void => {
+                if (!replayValid(gen, replay)) return;
                 const startY = t.buffer.active.baseY + t.buffer.active.cursorY;
                 t.write(current.message + "\r\n", (): void => {
-                    const endY = t.buffer.active.baseY + t.buffer.active.cursorY;
-                    const rowsUsed = Math.max(1, endY - startY);
-                    const marker = t.registerMarker(-rowsUsed);
-                    if (marker) {
-                        const decoration = t.registerDecoration({
-                            marker,
-                            anchor: "left",
-                            x: 0,
-                            width: 1,
-                            height: 1,
-                            layer: "top",
-                        });
-                        if (decoration) {
-                            decoration.onRender((el: HTMLElement): void => {
-                                el.classList.add("console-timestamp-gutter");
-                                el.textContent = formatTimestamp(current.timestamp);
-                            });
-                            marker.onDispose((): void => decoration.dispose());
-                        }
-                    }
+                    if (!replayValid(gen, replay)) return;
+                    attachDecoration(t, current.timestamp, startY);
                     step();
                 });
             });
@@ -470,7 +499,7 @@
         socketRef.send(JSON.stringify({ type: "command", command }));
         commandInput = "";
         autoScroll = true;
-        term?.scrollToBottom();
+        if (term) safeScrollToBottom(term);
     }
 
     function handleKeydown(e: KeyboardEvent): void {
@@ -519,11 +548,18 @@
         t.loadAddon(search);
         t.loadAddon(links);
         t.open(termHostEl);
+        // Run the initial fit before any writes so the renderer's
+        // dimensions are populated — otherwise the first scrollToBottom
+        // hits an undefined `dimensions` and throws.
+        try {
+            fit.fit();
+        } catch {
+            // Host not yet laid out; the ResizeObserver below will retry.
+        }
 
         // Sync autoscroll to the user's viewport: if they scroll up we stop
         // pinning to the bottom; the "jump to latest" pill re-arms it.
         t.onScroll((): void => {
-            if (!t) return;
             const viewportY = t.buffer.active.viewportY;
             const base = t.buffer.active.baseY;
             autoScroll = viewportY >= base;
@@ -543,6 +579,7 @@
         term = t;
         fitAddon = fit;
         searchAddon = search;
+        termGen += 1;
 
         // Re-render any buffered history into the fresh terminal so hot-
         // reload and tab switches don't lose the backlog. Replay goes
@@ -553,11 +590,19 @@
         }
 
         return (): void => {
-            ro.disconnect();
-            t.dispose();
+            // Bump the generation BEFORE disposing so any in-flight write
+            // callback that fires during/after teardown sees the mismatch
+            // and aborts instead of touching xterm internals.
+            termGen += 1;
             term = null;
             fitAddon = null;
             searchAddon = null;
+            ro.disconnect();
+            try {
+                t.dispose();
+            } catch {
+                // Already torn down mid-callback chain — safe to ignore.
+            }
         };
     });
 
@@ -791,7 +836,7 @@
                 <button
                     onclick={() => {
                         autoScroll = true;
-                        term?.scrollToBottom();
+                        if (term) safeScrollToBottom(term);
                     }}
                     class="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border bg-card/95 px-3 py-1.5 text-xs text-muted-foreground shadow-lg backdrop-blur-sm transition-colors hover:text-foreground"
                 >
