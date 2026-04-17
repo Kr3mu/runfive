@@ -47,6 +47,31 @@ export interface CreateServerRequest {
     maxPlayers?: number;
 }
 
+/**
+ * Partial mutation body for {@link updateServer}. Every field is optional and
+ * omitted fields leave the stored value untouched. For the three fields that
+ * carry a meaningful cleared state (`licenseKey`, `enforceGameBuild`,
+ * `onesync`) sending an empty string clears the value on disk.
+ */
+export interface UpdateServerRequest {
+    /** Display name (sv_hostname). Cannot be cleared. */
+    name?: string;
+    /** fxserver build identifier. The server installs it on the caller's behalf. */
+    artifactVersion?: string;
+    /** Cfx.re key rotation. "" clears, "cfxk_..." rotates, omitted keeps. */
+    licenseKey?: string;
+    /** TCP/UDP endpoint port. 0 triggers server-side re-allocation. */
+    port?: number;
+    /** sv_maxclients. 0 resets to the panel default. */
+    maxPlayers?: number;
+    /** sv_enforceGameBuild. Empty string clears. */
+    enforceGameBuild?: string;
+    /** gameplay.onesync: "on" | "legacy" | "infinity" | "off" | "" (disabled). */
+    onesync?: string;
+    /** Full replacement for the resources.ensure list. */
+    resourcesEnsure?: string[];
+}
+
 export interface ServerProcessStatus {
     id: string;
     status: ServerStatus;
@@ -94,6 +119,64 @@ export async function createServer(body: CreateServerRequest): Promise<ManagedSe
     }
 
     return (await res.json()) as ManagedServer;
+}
+
+/**
+ * Apply a partial update to an existing server's on-disk config.
+ *
+ * The backend mirrors the create-path validation (port ranges, slot bounds,
+ * onesync allow-list, license-key prefix) and re-emits the generated
+ * server.cfg synchronously, so a successful response means the next launch
+ * will pick up the change.
+ *
+ * @param serverId - Directory ID (stable across renames).
+ * @param body - Fields to change. Omitted fields leave the stored value alone.
+ * @returns The updated managed server as it appears in the panel list.
+ */
+export async function updateServer(
+    serverId: string,
+    body: UpdateServerRequest,
+): Promise<ManagedServer> {
+    const res: Response = await fetch(`/v1/servers/${encodeURIComponent(serverId)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+        const payload: { error?: string } = (await res.json()) as { error?: string };
+        throw new Error(payload.error ?? `PUT /v1/servers/${serverId} failed: ${res.status}`);
+    }
+
+    return (await res.json()) as ManagedServer;
+}
+
+/**
+ * Remove a server from the panel.
+ *
+ * Soft-deletes by default — the directory is moved under
+ * `servers/.trash/<id>.<timestamp>/` so fat-finger deletes can be rolled back
+ * by an operator. Pass `{ trash: false }` to permanently remove the directory.
+ *
+ * The backend rejects with 409 while the launcher still owns a live process,
+ * so callers should stop the server first (or let the UI's confirm dialog do
+ * that) before calling this.
+ *
+ * @param serverId - Directory ID of the server to remove.
+ * @param options.trash - Defaults to true (soft-delete). Set to false for permanent removal.
+ */
+export async function deleteServer(
+    serverId: string,
+    options: { trash?: boolean } = {},
+): Promise<void> {
+    const url = new URL(`/v1/servers/${encodeURIComponent(serverId)}`, window.location.origin);
+    if (options.trash === false) url.searchParams.set("trash", "false");
+
+    const res: Response = await fetch(url.toString(), { method: "DELETE" });
+    if (!res.ok) {
+        const payload: { error?: string } = (await res.json()) as { error?: string };
+        throw new Error(payload.error ?? `DELETE /v1/servers/${serverId} failed: ${res.status}`);
+    }
 }
 
 export async function fetchServerStatus(serverId: string): Promise<ServerProcessStatus> {

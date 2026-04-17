@@ -247,6 +247,21 @@ func (m *Manager) Status(id string) (models.ServerProcessStatus, error) {
 	return runtime.Status(), nil
 }
 
+// IsRunning reports whether the server has a live child process (starting or
+// running). Returns false for unknown IDs so callers like DELETE /servers/:id
+// can fail-open the registry check without a prior existence lookup.
+func (m *Manager) IsRunning(id string) bool {
+	m.mu.RLock()
+	runtime, ok := m.servers[id]
+	m.mu.RUnlock()
+	if !ok {
+		return false
+	}
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	return runtime.status == models.ServerStatusStarting || runtime.status == models.ServerStatusRunning
+}
+
 // Tail returns the most recent console lines for one managed server.
 func (m *Manager) Tail(id string, n int) ([]models.ServerLogLine, error) {
 	runtime, err := m.ensureRuntime(id)

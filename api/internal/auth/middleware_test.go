@@ -280,6 +280,101 @@ func TestGetPermissions_ReturnsPermsWhenSet(t *testing.T) {
 	}
 }
 
+// --- RequireServerOrGlobalPerm Tests ---
+
+func TestRequireServerOrGlobalPerm_OwnerBypasses(t *testing.T) {
+	app := fiber.New()
+	app.Use(injectPerms(&permissions.ResolvedPermissions{IsOwner: true}))
+	app.Put("/servers/:serverId", RequireServerOrGlobalPerm("settings", "update", "servers", "update"), okHandler)
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/servers/my-srv", http.NoBody)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200 for owner, got %d", resp.StatusCode)
+	}
+}
+
+func TestRequireServerOrGlobalPerm_GlobalPermissionAdmits(t *testing.T) {
+	app := fiber.New()
+	app.Use(injectPerms(&permissions.ResolvedPermissions{
+		Global: permissions.PermissionMap{"servers": {"update": true}},
+	}))
+	app.Put("/servers/:serverId", RequireServerOrGlobalPerm("settings", "update", "servers", "update"), okHandler)
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/servers/prod-1", http.NoBody)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200 for global permission, got %d", resp.StatusCode)
+	}
+}
+
+func TestRequireServerOrGlobalPerm_PerServerPermissionAdmits(t *testing.T) {
+	app := fiber.New()
+	app.Use(injectPerms(&permissions.ResolvedPermissions{
+		Servers: map[string]permissions.PermissionMap{
+			"prod-1": {"settings": {"update": true}},
+		},
+	}))
+	app.Put("/servers/:serverId", RequireServerOrGlobalPerm("settings", "update", "servers", "update"), okHandler)
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/servers/prod-1", http.NoBody)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200 for server-scoped permission, got %d", resp.StatusCode)
+	}
+}
+
+func TestRequireServerOrGlobalPerm_WrongServerDenied(t *testing.T) {
+	app := fiber.New()
+	app.Use(injectPerms(&permissions.ResolvedPermissions{
+		Servers: map[string]permissions.PermissionMap{
+			"prod-1": {"settings": {"update": true}},
+		},
+	}))
+	app.Put("/servers/:serverId", RequireServerOrGlobalPerm("settings", "update", "servers", "update"), okHandler)
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/servers/prod-2", http.NoBody)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != 403 {
+		t.Fatalf("expected 403 for wrong server, got %d", resp.StatusCode)
+	}
+}
+
+func TestRequireServerOrGlobalPerm_NoPermissionsDenied(t *testing.T) {
+	app := fiber.New()
+	app.Use(injectPerms(&permissions.ResolvedPermissions{
+		Global:  permissions.PermissionMap{},
+		Servers: map[string]permissions.PermissionMap{},
+	}))
+	app.Put("/servers/:serverId", RequireServerOrGlobalPerm("settings", "update", "servers", "update"), okHandler)
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/servers/prod-1", http.NoBody)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("app.Test: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != 403 {
+		t.Fatalf("expected 403 without either permission, got %d", resp.StatusCode)
+	}
+}
+
 // --- RequireMaster Tests ---
 
 func TestRequireMaster_OwnerAllowed(t *testing.T) {

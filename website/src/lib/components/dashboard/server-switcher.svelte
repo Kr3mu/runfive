@@ -12,6 +12,7 @@
     import X from "@lucide/svelte/icons/x";
     import ServerCog from "@lucide/svelte/icons/server-cog";
     import Plus from "@lucide/svelte/icons/plus";
+    import Trash2 from "@lucide/svelte/icons/trash-2";
     import {
         serversQueryOptions,
         type ManagedServer,
@@ -20,6 +21,7 @@
     import { authQueryOptions } from "$lib/api/auth";
     import { canGlobal } from "$lib/permissions.svelte";
     import { serverState } from "$lib/server-state.svelte";
+    import DeleteServerDialog from "./delete-server-dialog.svelte";
 
     interface Props {
         /** Collapsed sidebar shows a status dot and keeps the popover switcher. */
@@ -40,6 +42,22 @@
     const list = $derived(servers.data ?? []);
     const selected = $derived(serverState.resolve(list));
     const canCreateServers = $derived(canGlobal(authQuery.data, "servers", "create"));
+    const canDeleteServers = $derived(canGlobal(authQuery.data, "servers", "delete"));
+
+    /** Dialog state: which server the delete modal is currently targeting. */
+    let deleteTarget = $state<ManagedServer | null>(null);
+    let deleteDialogOpen = $state(false);
+
+    function openDeleteDialog(server: ManagedServer, event: MouseEvent): void {
+        event.stopPropagation();
+        event.preventDefault();
+        deleteTarget = server;
+        deleteDialogOpen = true;
+        // Close any open switcher dropdowns so the dialog isn't visually
+        // competing with the popover backdrop.
+        popoverOpen = false;
+        inlineOpen = false;
+    }
 
     /** Servers appearing before the active one in list order (≤3 case). */
     const beforeActive = $derived(() => {
@@ -137,39 +155,56 @@
 </script>
 
 {#snippet serverRow(server: ManagedServer)}
-    <button
-        onclick={() => handleSelect(server.id)}
-        class="group w-full rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted/40"
-    >
-        <div class="flex items-center gap-2">
-            <div
-                class="h-2 w-2 shrink-0 rounded-full {statusDot[server.status]}"
-            ></div>
-            <span
-                class="flex-1 truncate font-heading text-[11px] font-semibold text-foreground/90"
-            >
-                {server.name}
-            </span>
-            <span class="shrink-0 font-mono text-[10px] tabular-nums">
-                <span class="font-medium text-foreground/70"
-                    >{server.playerCount}</span
-                ><span class="text-muted-foreground/40"
-                    >/{server.maxPlayers}</span
+    <!-- Two-column layout: main select-button is flex-1, trash gets its own
+         fixed-width column so it never overlaps the player count. The icon
+         is always visible (muted) rather than hover-only so the action is
+         discoverable without trial-and-error. -->
+    <div class="flex items-stretch gap-1 rounded-lg transition-colors hover:bg-muted/40">
+        <button
+            onclick={() => handleSelect(server.id)}
+            class="min-w-0 flex-1 rounded-lg px-2 py-2 text-left"
+        >
+            <div class="flex items-center gap-2">
+                <div
+                    class="h-2 w-2 shrink-0 rounded-full {statusDot[server.status]}"
+                ></div>
+                <span
+                    class="flex-1 truncate font-heading text-[11px] font-semibold text-foreground/90"
                 >
-            </span>
-        </div>
-        <div class="mt-0.5 flex items-center gap-1.5 pl-4">
-            <span class="text-[9px] font-medium {statusText[server.status]}">
-                {statusLabel[server.status]}
-            </span>
-            <span class="text-[8px] text-muted-foreground/25">•</span>
-            <span
-                class="truncate font-mono text-[9px] text-muted-foreground/40"
+                    {server.name}
+                </span>
+                <span class="shrink-0 font-mono text-[10px] tabular-nums">
+                    <span class="font-medium text-foreground/70"
+                        >{server.playerCount}</span
+                    ><span class="text-muted-foreground/40"
+                        >/{server.maxPlayers}</span
+                    >
+                </span>
+            </div>
+            <div class="mt-0.5 flex items-center gap-1.5 pl-4">
+                <span class="text-[9px] font-medium {statusText[server.status]}">
+                    {statusLabel[server.status]}
+                </span>
+                <span class="text-[8px] text-muted-foreground/25">•</span>
+                <span
+                    class="truncate font-mono text-[9px] text-muted-foreground/40"
+                >
+                    {server.address}
+                </span>
+            </div>
+        </button>
+        {#if canDeleteServers}
+            <button
+                type="button"
+                onclick={(e: MouseEvent) => openDeleteDialog(server, e)}
+                class="flex w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/35 transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10 focus-visible:text-destructive focus-visible:outline-none"
+                aria-label="Delete {server.name}"
+                title="Delete {server.name}"
             >
-                {server.address}
-            </span>
-        </div>
-    </button>
+                <Trash2 size={11} />
+            </button>
+        {/if}
+    </div>
 {/snippet}
 
 {#snippet triggerCard()}
@@ -310,72 +345,86 @@
             <div class="flex max-h-80 flex-col gap-0.5 overflow-y-auto px-1">
                 {#each list as server (server.id)}
                     {@const isActive = selected?.id === server.id}
-                    <button
-                        onclick={() => handleSelect(server.id)}
-                        class="group relative w-full rounded-lg px-2 py-2 text-left transition-colors
+                    <div
+                        class="relative flex items-stretch gap-1 rounded-lg transition-colors
                             {isActive ? 'bg-primary/8' : 'hover:bg-muted/40'}"
                     >
                         {#if isActive}
                             <span
-                                class="absolute top-1/2 left-0 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-primary"
+                                class="pointer-events-none absolute top-1/2 left-0 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-primary"
                             ></span>
                         {/if}
-
-                        <div class="flex items-center gap-2.5">
-                            <div
-                                class="h-2 w-2 shrink-0 rounded-full {statusDot[
-                                    server.status
-                                ]}"
-                            ></div>
-                            <span
-                                class="flex-1 truncate font-heading text-[12.5px] font-semibold
-                                    {isActive
-                                    ? 'text-foreground'
-                                    : 'text-foreground/90'}"
-                            >
-                                {server.name}
-                            </span>
-                            <span
-                                class="shrink-0 font-mono text-[10.5px] tabular-nums"
-                            >
+                        <button
+                            onclick={() => handleSelect(server.id)}
+                            class="min-w-0 flex-1 rounded-lg px-2 py-2 text-left"
+                        >
+                            <div class="flex items-center gap-2.5">
+                                <div
+                                    class="h-2 w-2 shrink-0 rounded-full {statusDot[
+                                        server.status
+                                    ]}"
+                                ></div>
                                 <span
-                                    class={isActive
-                                        ? "font-semibold text-primary"
-                                        : "font-medium text-foreground/70"}
+                                    class="flex-1 truncate font-heading text-[12.5px] font-semibold
+                                        {isActive
+                                        ? 'text-foreground'
+                                        : 'text-foreground/90'}"
                                 >
-                                    {server.playerCount}
-                                </span><span class="text-muted-foreground/40"
-                                    >/{server.maxPlayers}</span
+                                    {server.name}
+                                </span>
+                                <span
+                                    class="shrink-0 font-mono text-[10.5px] tabular-nums"
                                 >
-                            </span>
-                            <div
-                                class="flex h-3.5 w-3.5 shrink-0 items-center justify-center"
-                            >
-                                {#if isActive}
-                                    <Check
-                                        size={12}
-                                        class="text-primary"
-                                        strokeWidth={2.5}
-                                    />
-                                {/if}
+                                    <span
+                                        class={isActive
+                                            ? "font-semibold text-primary"
+                                            : "font-medium text-foreground/70"}
+                                    >
+                                        {server.playerCount}
+                                    </span><span class="text-muted-foreground/40"
+                                        >/{server.maxPlayers}</span
+                                    >
+                                </span>
+                                <div
+                                    class="flex h-3.5 w-3.5 shrink-0 items-center justify-center"
+                                >
+                                    {#if isActive}
+                                        <Check
+                                            size={12}
+                                            class="text-primary"
+                                            strokeWidth={2.5}
+                                        />
+                                    {/if}
+                                </div>
                             </div>
-                        </div>
 
-                        <div class="mt-1 flex items-center gap-1.5 pl-4.5">
-                            <span
-                                class="text-[9.5px] font-medium {statusText[
-                                    server.status
-                                ]}">{statusLabel[server.status]}</span
+                            <div class="mt-1 flex items-center gap-1.5 pl-4.5">
+                                <span
+                                    class="text-[9.5px] font-medium {statusText[
+                                        server.status
+                                    ]}">{statusLabel[server.status]}</span
+                                >
+                                <span class="text-[9px] text-muted-foreground/25"
+                                    >•</span
+                                >
+                                <span
+                                    class="truncate font-mono text-[9.5px] text-muted-foreground/40"
+                                    >{server.address}</span
+                                >
+                            </div>
+                        </button>
+                        {#if canDeleteServers}
+                            <button
+                                type="button"
+                                onclick={(e: MouseEvent) => openDeleteDialog(server, e)}
+                                class="flex w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground/35 transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10 focus-visible:text-destructive focus-visible:outline-none"
+                                aria-label="Delete {server.name}"
+                                title="Delete {server.name}"
                             >
-                            <span class="text-[9px] text-muted-foreground/25"
-                                >•</span
-                            >
-                            <span
-                                class="truncate font-mono text-[9.5px] text-muted-foreground/40"
-                                >{server.address}</span
-                            >
-                        </div>
-                    </button>
+                                <Trash2 size={12} />
+                            </button>
+                        {/if}
+                    </div>
                 {/each}
 
                 {#if list.length === 0 && !servers.isPending}
@@ -534,3 +583,9 @@
         {/if}
     </div>
 {/if}
+
+<DeleteServerDialog
+    bind:open={deleteDialogOpen}
+    server={deleteTarget}
+    fallbackServers={list}
+/>

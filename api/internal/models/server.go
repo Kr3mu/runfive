@@ -75,6 +75,35 @@ type CreateServerRequest struct {
 	MaxPlayers int `json:"maxPlayers,omitempty"`
 }
 
+// UpdateServerRequest is the body for PUT /v1/servers/:serverId. Every field
+// is a pointer so the handler can distinguish "absent from the request"
+// (leave the stored value alone) from "explicitly sent" (apply the new
+// value, including the cleared state for the three fields that support it —
+// LicenseKey, EnforceGameBuild, OneSync).
+type UpdateServerRequest struct {
+	// Name changes the human-readable display name (sv_hostname). The
+	// directory ID stays constant so RBAC references remain valid.
+	Name *string `json:"name,omitempty"`
+	// ArtifactVersion switches the fxserver build. The server installs the
+	// new artifact on the caller's behalf before writing server.toml.
+	ArtifactVersion *string `json:"artifactVersion,omitempty"`
+	// LicenseKey rotates or clears the Cfx.re key. "" clears the stored
+	// ciphertext, "cfxk_..." re-encrypts and replaces it.
+	LicenseKey *string `json:"licenseKey,omitempty"`
+	// Port changes the TCP/UDP endpoint port. 0 = re-allocate the next free
+	// slot, matching create semantics.
+	Port *int `json:"port,omitempty"`
+	// MaxPlayers changes the sv_maxclients value. 0 = reset to panel default.
+	MaxPlayers *int `json:"maxPlayers,omitempty"`
+	// EnforceGameBuild feeds sv_enforceGameBuild. Empty string clears it.
+	EnforceGameBuild *string `json:"enforceGameBuild,omitempty"`
+	// OneSync is the gameplay.onesync selector (on | legacy | infinity | off
+	// or "" to omit the CLI arg entirely).
+	OneSync *string `json:"onesync,omitempty"`
+	// ResourcesEnsure replaces the full resources.ensure list when non-nil.
+	ResourcesEnsure *[]string `json:"resourcesEnsure,omitempty"`
+}
+
 // InstalledArtifact represents an extracted artifact on disk.
 type InstalledArtifact struct {
 	OS      string `json:"os"`

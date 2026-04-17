@@ -15,6 +15,7 @@ import (
 	"github.com/runfivedev/runfive/internal/launcher"
 	"github.com/runfivedev/runfive/internal/models"
 	"github.com/runfivedev/runfive/internal/permissions"
+	"github.com/runfivedev/runfive/internal/serverfs"
 )
 
 const (
@@ -30,7 +31,10 @@ const (
 
 type serverRegistry interface {
 	List() ([]models.ManagedServer, error)
+	Get(string) (models.ManagedServer, bool)
 	Create(name, artifactVersion, licenseKey string, port, maxPlayers int) (models.ManagedServer, error)
+	Update(string, *serverfs.UpdatePatch) (models.ManagedServer, error)
+	Delete(string, bool) error
 	Reload() error
 }
 
@@ -45,6 +49,7 @@ type serverLauncher interface {
 	Tail(string, int) ([]models.ServerLogLine, error)
 	Subscribe(string) (*launcher.Subscription, error)
 	SendCommand(string, string) error
+	IsRunning(string) bool
 }
 
 // ServerHandler serves filesystem-backed managed server endpoints.
@@ -122,6 +127,84 @@ func (h *ServerHandler) Create(c fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(server)
+}
+
+// Update applies a partial patch to a server's on-disk config.
+//
+// PUT /v1/servers/:serverId
+//
+// Fields absent from the request body are left untouched; fields present with
+// a null value are applied as "clear" for the three fields that support it
+// (license key, enforce_game_build, onesync). Port collisions are not
+// rejected — they downgrade the entry to invalid on reload, matching create
+// semantics.
+func (h *ServerHandler) Update(c fiber.Ctx) error {
+	serverID := c.Params("serverId")
+	if serverID == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "missing server ID")
+	}
+	if _, ok := h.registry.Get(serverID); !ok {
+		return fiber.NewError(fiber.StatusNotFound, "server not found")
+	}
+
+	var req models.UpdateServerRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+
+	if req.ArtifactVersion != nil {
+		version := strings.TrimSpace(*req.ArtifactVersion)
+		if version == "" {
+			return fiber.NewError(fiber.StatusBadRequest, "artifact version cannot be cleared")
+		}
+		// Pre-install matches POST /v1/servers so operators can flip versions
+		// in the UI without a separate "download first" step.
+		if _, err := h.artifacts.Install(context.Background(), version); err != nil {
+			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		}
+	}
+
+	patch := &serverfs.UpdatePatch{
+		Name:             req.Name,
+		ArtifactVersion:  req.ArtifactVersion,
+		Port:             req.Port,
+		MaxPlayers:       req.MaxPlayers,
+		EnforceGameBuild: req.EnforceGameBuild,
+		OneSync:          req.OneSync,
+		ResourcesEnsure:  req.ResourcesEnsure,
+		LicenseKey:       req.LicenseKey,
+	}
+
+	server, err := h.registry.Update(serverID, patch)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	return c.JSON(server)
+}
+
+// Delete removes a server from the panel. The default is soft-delete (move to
+// servers/.trash/<id>.<timestamp>/); pass ?trash=false to permanently remove
+// the directory. Requests are rejected with 409 while the launcher still has
+// a live child process for this server.
+//
+// DELETE /v1/servers/:serverId
+func (h *ServerHandler) Delete(c fiber.Ctx) error {
+	serverID := c.Params("serverId")
+	if serverID == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "missing server ID")
+	}
+	if _, ok := h.registry.Get(serverID); !ok {
+		return fiber.NewError(fiber.StatusNotFound, "server not found")
+	}
+	if h.launcher.IsRunning(serverID) {
+		return fiber.NewError(fiber.StatusConflict, "server is still running; stop it first")
+	}
+
+	trash := parseTrashQuery(c.Query("trash"))
+	if err := h.registry.Delete(serverID, trash); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 // Reload forces a full rescan of the servers directory, rebuilding the
@@ -316,6 +399,18 @@ func launcherHTTPError(err error) error {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	default:
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+}
+
+// parseTrashQuery maps the optional ?trash= query parameter to a boolean.
+// Empty or missing = trash (safe default — this is the destructive endpoint,
+// the cheap-undo path should be the one you get by omitting the switch).
+func parseTrashQuery(raw string) bool {
+	switch strings.TrimSpace(strings.ToLower(raw)) {
+	case "", "1", "true", "yes":
+		return true
+	default:
+		return false
 	}
 }
 
