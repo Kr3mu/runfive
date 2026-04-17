@@ -12,8 +12,8 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
 
-	"github.com/Kr3mu/runfive/internal/auth"
-	"github.com/Kr3mu/runfive/internal/models"
+	"github.com/runfivedev/runfive/internal/auth"
+	"github.com/runfivedev/runfive/internal/models"
 )
 
 const inviteTTL = 24 * time.Hour

@@ -6,10 +6,10 @@
 
 **fivem admin panel. open source. done right.**
 
-[![Web Build](https://img.shields.io/github/actions/workflow/status/Kr3mu/runfive/web.yml?style=for-the-badge&label=web&color=yellow)](https://github.com/Kr3mu/runfive/actions/workflows/web.yml)
-[![API Build](https://img.shields.io/github/actions/workflow/status/Kr3mu/runfive/api.yml?style=for-the-badge&label=api&color=yellow)](https://github.com/Kr3mu/runfive/actions/workflows/api.yml)
+[![Web Build](https://img.shields.io/github/actions/workflow/status/runfivedev/runfive/web.yml?style=for-the-badge&label=web&color=yellow)](https://github.com/runfivedev/runfive/actions/workflows/web.yml)
+[![API Build](https://img.shields.io/github/actions/workflow/status/runfivedev/runfive/api.yml?style=for-the-badge&label=api&color=yellow)](https://github.com/runfivedev/runfive/actions/workflows/api.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg?style=for-the-badge)](LICENSE)
-[![GitHub Stars](https://img.shields.io/github/stars/Kr3mu/runfive?style=for-the-badge&color=yellow)](https://github.com/Kr3mu/runfive/stargazers)
+[![GitHub Stars](https://img.shields.io/github/stars/runfivedev/runfive?style=for-the-badge&color=yellow)](https://github.com/runfivedev/runfive/stargazers)
 
 </div>
 
@@ -24,7 +24,7 @@ runfive is a FiveM server management panel built for server owners and developer
 
 ## Quick Start
 
-Download the latest binary from [Releases](https://github.com/Kr3mu/runfive/releases) and run it:
+Download the latest binary from [Releases](https://github.com/runfivedev/runfive/releases) and run it:
 
 ```bash
 ./runfive

@@ -1,10 +1,12 @@
 package models
 
+import "time"
+
 // ServerStatus is the lifecycle state surfaced to the dashboard.
 type ServerStatus string
 
 const (
-	ServerStatusOnline   ServerStatus = "online"
+	ServerStatusRunning  ServerStatus = "running"
 	ServerStatusStarting ServerStatus = "starting"
 	ServerStatusStopped  ServerStatus = "stopped"
 	ServerStatusCrashed  ServerStatus = "crashed"
@@ -16,6 +18,7 @@ type ManagedServer struct {
 	Name            string       `json:"name"`
 	Status          ServerStatus `json:"status"`
 	Address         string       `json:"address"`
+	Port            int          `json:"port"`
 	PlayerCount     int          `json:"playerCount"`
 	MaxPlayers      int          `json:"maxPlayers"`
 	CPU             int          `json:"cpu"`
@@ -24,10 +27,52 @@ type ManagedServer struct {
 	ArtifactVersion string       `json:"artifactVersion"`
 }
 
+// ServerProcessStatus is the live runtime state for one launched server.
+type ServerProcessStatus struct {
+	ID         string       `json:"id"`
+	Status     ServerStatus `json:"status"`
+	PID        int          `json:"pid,omitempty"`
+	ExitCode   *int         `json:"exitCode,omitempty"`
+	ExitReason string       `json:"exitReason,omitempty"`
+	UpdatedAt  time.Time    `json:"updatedAt"`
+}
+
+// ServerLogLine is one console line captured from a managed server.
+type ServerLogLine struct {
+	ID        int64     `json:"id"`
+	Timestamp time.Time `json:"timestamp"`
+	Stream    string    `json:"stream"`
+	Message   string    `json:"message"`
+}
+
+// ServerLogsResponse is returned by GET /v1/servers/:id/logs.
+type ServerLogsResponse struct {
+	Lines []ServerLogLine `json:"lines"`
+}
+
+// ServerConsoleEvent is sent over the live console websocket.
+type ServerConsoleEvent struct {
+	Type   string               `json:"type"`
+	Status *ServerProcessStatus `json:"status,omitempty"`
+	Lines  []ServerLogLine      `json:"lines,omitempty"`
+	Line   *ServerLogLine       `json:"line,omitempty"`
+	Error  string               `json:"error,omitempty"`
+}
+
 // CreateServerRequest is the body for POST /v1/servers.
 type CreateServerRequest struct {
 	Name            string `json:"name"`
 	ArtifactVersion string `json:"artifactVersion"`
+	// LicenseKey is the optional Cfx.re license key (cfxk_...) the panel
+	// encrypts and writes to the new server's TOML. Empty means "I'll set
+	// this later" — the server will refuse to boot until one is provided.
+	LicenseKey string `json:"licenseKey,omitempty"`
+	// Port is the optional TCP/UDP endpoint port. Zero means "let the panel
+	// pick the next free port" and is the recommended default.
+	Port int `json:"port,omitempty"`
+	// MaxPlayers is the optional sv_maxclients value. Zero means "use the
+	// panel default" (currently 32).
+	MaxPlayers int `json:"maxPlayers,omitempty"`
 }
 
 // InstalledArtifact represents an extracted artifact on disk.

@@ -2,24 +2,19 @@
 package v1
 
 import (
+	ws "github.com/gofiber/contrib/v3/websocket"
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
 
-	"github.com/Kr3mu/runfive/internal/artifacts"
-	"github.com/Kr3mu/runfive/internal/auth"
-	"github.com/Kr3mu/runfive/internal/permissions"
-	"github.com/Kr3mu/runfive/internal/runtimepath"
-	"github.com/Kr3mu/runfive/internal/serverfs"
+	"github.com/runfivedev/runfive/internal/artifacts"
+	"github.com/runfivedev/runfive/internal/auth"
+	"github.com/runfivedev/runfive/internal/launcher"
+	"github.com/runfivedev/runfive/internal/permissions"
+	"github.com/runfivedev/runfive/internal/serverfs"
 )
 
 // RegisterRouter mounts all v1 API routes on the provided router group.
-func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *auth.CfxAuth, fe *auth.FieldEncryptor, discord *auth.DiscordAuth, st *auth.SetupTokenStore, baseURL, artifactsDir string) {
-	artifactManager, err := artifacts.NewManager(artifactsDir)
-	if err != nil {
-		panic(err)
-	}
-	serverRegistry := serverfs.NewRegistry(runtimepath.Resolve("servers"), artifactManager)
-
+func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *auth.CfxAuth, fe *auth.FieldEncryptor, discord *auth.DiscordAuth, st *auth.SetupTokenStore, baseURL string, artifactManager *artifacts.Manager, serverRegistry *serverfs.Registry, launcherManager *launcher.Manager) {
 	authHandler := NewAuthHandler(db, sm, cfx, fe, discord, st)
 	authGroup := r.Group("/auth")
 
@@ -86,10 +81,30 @@ func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *a
 	roleGroup.Delete("/:id", auth.RequireGlobalPerm(permissions.GlobalRoles, permissions.ActionDelete), roleHandler.Delete)
 
 	// Server management endpoints (permission-based)
-	serverHandler := NewServerHandler(serverRegistry, artifactManager)
+	serverHandler := NewServerHandler(serverRegistry, artifactManager, launcherManager)
 	serverGroup := r.Group("/servers", auth.RequireAuth(sm, db), auth.LoadPermissions(db))
 	serverGroup.Get("", serverHandler.List)
 	serverGroup.Post("", auth.RequireGlobalPerm(permissions.GlobalServers, permissions.ActionCreate), serverHandler.Create)
+	serverGroup.Post("/:serverId/start", auth.RequireServerPerm(permissions.ServerConsole, permissions.ActionExecute), serverHandler.Start)
+	serverGroup.Post("/:serverId/stop", auth.RequireServerPerm(permissions.ServerConsole, permissions.ActionExecute), serverHandler.Stop)
+	serverGroup.Get("/:serverId/status", auth.RequireServerPerm(permissions.ServerConsole, permissions.ActionRead), serverHandler.Status)
+	serverGroup.Get("/:serverId/logs", auth.RequireServerPerm(permissions.ServerConsole, permissions.ActionRead), serverHandler.Logs)
+	serverGroup.Get(
+		"/:serverId/logs/ws",
+		auth.RequireServerPerm(permissions.ServerConsole, permissions.ActionRead),
+		func(c fiber.Ctx) error {
+			if !ws.IsWebSocketUpgrade(c) {
+				return fiber.ErrUpgradeRequired
+			}
+			c.Locals("consoleCanExecute", canExecuteConsole(auth.GetPermissions(c), c.Params("serverId")))
+			return c.Next()
+		},
+		ws.New(serverHandler.StreamLogs),
+	)
+
+	// Admin endpoints (owner-only manual fallbacks)
+	adminGroup := r.Group("/admin", auth.RequireAuth(sm, db), auth.RequireMaster)
+	adminGroup.Post("/reload-servers", serverHandler.Reload)
 
 	// Artifact management endpoints (permission-based)
 	artifactHandler := NewArtifactHandler(artifactManager, serverRegistry)

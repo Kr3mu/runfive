@@ -44,11 +44,11 @@ formatters:
     - goimports
   settings:
     gofumpt:
-      module-path: github.com/Kr3mu/runfive
+      module-path: github.com/runfivedev/runfive
       extra-rules: true
     goimports:
       local-prefixes:
-        - github.com/Kr3mu/runfive
+        - github.com/runfivedev/runfive
 
 issues:
   max-issues-per-linter: 0

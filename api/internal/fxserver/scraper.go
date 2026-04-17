@@ -145,7 +145,7 @@ func fetchPage(ctx context.Context, pageURL string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fxserver: build request: %w", err)
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; RunFive/1.0; +https://github.com/Kr3mu/runfive)")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; RunFive/1.0; +https://github.com/runfivedev/runfive)")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 	req.Header.Set("Accept-Encoding", "gzip, br")
 

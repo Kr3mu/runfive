@@ -80,7 +80,7 @@
 
                 <div class="flex items-center gap-4">
                     <a
-                        href="https://github.com/Kr3mu/runfive"
+                        href="https://github.com/runfivedev/runfive"
                         target="_blank"
                         rel="noopener noreferrer"
                         class="text-muted-foreground/40 transition-colors hover:text-foreground"

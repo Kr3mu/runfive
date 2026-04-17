@@ -3,7 +3,7 @@ package permissions
 import (
 	"gorm.io/gorm"
 
-	"github.com/Kr3mu/runfive/internal/models"
+	"github.com/runfivedev/runfive/internal/models"
 )
 
 // RoleMeta holds display metadata for a role (used in API responses).

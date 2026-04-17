@@ -89,7 +89,7 @@
     }
 
     const statusDot: Record<ServerStatus, string> = {
-        online: "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.55)]",
+        running: "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.55)]",
         starting:
             "bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.55)] animate-pulse",
         stopped: "bg-muted-foreground/30",
@@ -97,14 +97,14 @@
     };
 
     const statusText: Record<ServerStatus, string> = {
-        online: "text-emerald-400/70",
+        running: "text-emerald-400/70",
         starting: "text-amber-400/80",
         stopped: "text-muted-foreground/50",
         crashed: "text-red-400/80",
     };
 
     const statusLabel: Record<ServerStatus, string> = {
-        online: "Online",
+        running: "Online",
         starting: "Starting",
         stopped: "Offline",
         crashed: "Crashed",

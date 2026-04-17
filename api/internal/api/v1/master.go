@@ -6,7 +6,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/joho/godotenv"
 
-	"github.com/Kr3mu/runfive/internal/models"
+	"github.com/runfivedev/runfive/internal/models"
 
 	gofiberclient "github.com/gofiber/fiber/v3/client"
 )

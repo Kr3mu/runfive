@@ -7,9 +7,9 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/Kr3mu/runfive/internal/auth"
-	"github.com/Kr3mu/runfive/internal/models"
-	"github.com/Kr3mu/runfive/internal/preferences"
+	"github.com/runfivedev/runfive/internal/auth"
+	"github.com/runfivedev/runfive/internal/models"
+	"github.com/runfivedev/runfive/internal/preferences"
 )
 
 // PreferenceHandler groups per-user preference HTTP handlers.

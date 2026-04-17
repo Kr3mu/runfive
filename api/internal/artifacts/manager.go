@@ -18,9 +18,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Kr3mu/runfive/internal/fivemartifactsdb"
-	"github.com/Kr3mu/runfive/internal/fxserver"
-	"github.com/Kr3mu/runfive/internal/models"
+	"github.com/runfivedev/runfive/internal/fivemartifactsdb"
+	"github.com/runfivedev/runfive/internal/fxserver"
+	"github.com/runfivedev/runfive/internal/models"
 )
 
 type upstreamClient interface {
@@ -250,6 +250,33 @@ func (m *Manager) installedRecord(version string) models.InstalledArtifact {
 		Version: version,
 		Path:    m.installedDir(version),
 	}
+}
+
+// ExecutablePath resolves the main fxserver launcher file inside an installed
+// artifact directory.
+func (m *Manager) ExecutablePath(version string) (string, error) {
+	if !m.IsInstalled(version) {
+		return "", fs.ErrNotExist
+	}
+
+	candidates := []string{"FXServer.exe", "run.sh", "FXServer"}
+	switch m.HostOS() {
+	case "windows":
+		candidates = []string{"FXServer.exe"}
+	case "linux":
+		candidates = []string{"run.sh", "FXServer"}
+	}
+
+	root := m.installedDir(version)
+	for _, name := range candidates {
+		path := filepath.Join(root, name)
+		info, err := os.Stat(path)
+		if err == nil && !info.IsDir() {
+			return path, nil
+		}
+	}
+
+	return "", fmt.Errorf("artifact %s is missing its launcher executable", version)
 }
 
 func (m *Manager) lockFor(version string) *sync.Mutex {

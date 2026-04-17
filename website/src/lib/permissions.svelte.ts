@@ -10,8 +10,8 @@
 
 import type { AuthUser } from '$lib/api/auth';
 
-/** CRUD action types matching the backend permission system. */
-type Action = 'create' | 'read' | 'update' | 'delete';
+/** Supported RBAC actions, including server-scoped sub-actions. */
+type Action = 'create' | 'read' | 'update' | 'delete' | 'kick' | 'warn' | 'execute';
 
 /**
  * Checks whether a user has a specific global (panel-wide) permission.

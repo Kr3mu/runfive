@@ -380,7 +380,7 @@
                 : 'justify-center gap-3'}"
         >
             <a
-                href="https://github.com/Kr3mu/runfive"
+                href="https://github.com/runfivedev/runfive"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="text-muted-foreground/20 transition-colors hover:text-foreground/60"

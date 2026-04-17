@@ -6,7 +6,7 @@ import (
 	"github.com/libtnb/sqlite"
 	"gorm.io/gorm"
 
-	"github.com/Kr3mu/runfive/internal/models"
+	"github.com/runfivedev/runfive/internal/models"
 )
 
 func setupTestDB(t *testing.T) *gorm.DB {
