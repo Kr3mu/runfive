@@ -140,6 +140,34 @@ func RequireServerPerm(resource, action string) fiber.Handler {
 	}
 }
 
+// RequireServerOrGlobalPerm returns middleware that admits callers who hold
+// either a per-server permission on the URL's serverId OR a panel-wide global
+// permission. It's the right fit for endpoints that day-to-day operators
+// should reach via their server role (least privilege) while platform admins
+// can still reach via a global grant. Owner always bypasses.
+func RequireServerOrGlobalPerm(serverResource, serverAction, globalResource, globalAction string) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		perms := GetPermissions(c)
+		if perms == nil {
+			return fiber.NewError(fiber.StatusForbidden, "no permissions loaded")
+		}
+		if perms.IsOwner {
+			return c.Next()
+		}
+		if perms.Global.Has(globalResource, globalAction) {
+			return c.Next()
+		}
+		serverID := c.Params("serverId")
+		if serverID == "" {
+			return fiber.NewError(fiber.StatusBadRequest, "missing server ID")
+		}
+		if sp, ok := perms.Servers[serverID]; ok && sp.Has(serverResource, serverAction) {
+			return c.Next()
+		}
+		return fiber.NewError(fiber.StatusForbidden, "insufficient permissions")
+	}
+}
+
 // GetPermissions extracts the resolved permissions from Fiber locals.
 // Returns nil if permissions have not been loaded.
 func GetPermissions(c fiber.Ctx) *permissions.ResolvedPermissions {

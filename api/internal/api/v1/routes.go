@@ -85,6 +85,19 @@ func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *a
 	serverGroup := r.Group("/servers", auth.RequireAuth(sm, db), auth.LoadPermissions(db))
 	serverGroup.Get("", serverHandler.List)
 	serverGroup.Post("", auth.RequireGlobalPerm(permissions.GlobalServers, permissions.ActionCreate), serverHandler.Create)
+	serverGroup.Put(
+		"/:serverId",
+		auth.RequireServerOrGlobalPerm(
+			permissions.ServerSettings, permissions.ActionUpdate,
+			permissions.GlobalServers, permissions.ActionUpdate,
+		),
+		serverHandler.Update,
+	)
+	serverGroup.Delete(
+		"/:serverId",
+		auth.RequireGlobalPerm(permissions.GlobalServers, permissions.ActionDelete),
+		serverHandler.Delete,
+	)
 	serverGroup.Post("/:serverId/start", auth.RequireServerPerm(permissions.ServerConsole, permissions.ActionExecute), serverHandler.Start)
 	serverGroup.Post("/:serverId/stop", auth.RequireServerPerm(permissions.ServerConsole, permissions.ActionExecute), serverHandler.Stop)
 	serverGroup.Get("/:serverId/status", auth.RequireServerPerm(permissions.ServerConsole, permissions.ActionRead), serverHandler.Status)
