@@ -313,31 +313,68 @@
             rawLines.push(line);
         }
 
-        // Chain the batch through the flush-then-write barrier so each
-        // message's startY snapshot reflects the previous write having been
-        // parsed. Every callback checks both the terminal generation and
-        // the replay generation so a superseded chain or a disposed
-        // terminal aborts cleanly without touching torn-down internals.
-        let i = 0;
-        const step = (): void => {
+        if (trimmed.length === 0) {
+            autoScroll = true;
+            return;
+        }
+
+        // One bulk write instead of 200 serial callback chains: chaining
+        // through xterm's async write scheduler per-line would queue
+        // hundreds of callbacks and stall the main thread for most of a
+        // page load. A single write flushes in one parse pass; we then
+        // walk the buffer backwards to find each message's starting row
+        // and attach one decoration per log line in a synchronous loop.
+        //
+        // isWrapped on IBufferLine tells us which rows are continuations
+        // of a wrapped message vs. fresh message starts, so wrapped lines
+        // still anchor their timestamp at the first visual row without
+        // per-line tracking during the write.
+        const bulk = trimmed.map((l: ServerLogLine): string => l.message).join("\r\n") + "\r\n";
+
+        t.write(bulk, (): void => {
             if (!replayValid(gen, replay)) return;
-            if (i >= trimmed.length) {
-                safeScrollToBottom(t);
-                autoScroll = true;
-                return;
+
+            const buffer = t.buffer.active;
+            const cursorAbs = buffer.baseY + buffer.cursorY;
+            const startsAbs: number[] = [];
+            const scanStart = Math.max(0, cursorAbs - SCROLLBACK_LINES * 4);
+            for (let y = scanStart; y < cursorAbs; y += 1) {
+                const bl = buffer.getLine(y);
+                if (!bl) continue;
+                if (bl.isWrapped) continue;
+                startsAbs.push(y);
             }
-            const current = trimmed[i++];
-            t.write("", (): void => {
-                if (!replayValid(gen, replay)) return;
-                const startY = t.buffer.active.baseY + t.buffer.active.cursorY;
-                t.write(current.message + "\r\n", (): void => {
-                    if (!replayValid(gen, replay)) return;
-                    attachDecoration(t, current.timestamp, startY);
-                    step();
+            // Collapse to exactly one start per message. The buffer may
+            // have one extra "fresh" row at the cursor position — drop
+            // it if the scan picked up more starts than messages.
+            while (startsAbs.length > trimmed.length) startsAbs.shift();
+
+            for (let i = 0; i < startsAbs.length; i += 1) {
+                const line = trimmed[i];
+                const absTarget = startsAbs[i];
+                const offset = absTarget - cursorAbs;
+                const marker = t.registerMarker(offset);
+                if (!marker) continue;
+                const decoration = t.registerDecoration({
+                    marker,
+                    anchor: "left",
+                    x: 0,
+                    width: 1,
+                    height: 1,
+                    layer: "top",
                 });
-            });
-        };
-        step();
+                if (!decoration) continue;
+                const ts = line.timestamp;
+                decoration.onRender((el: HTMLElement): void => {
+                    el.classList.add("console-timestamp-gutter");
+                    el.textContent = formatTimestamp(ts);
+                });
+                marker.onDispose((): void => decoration.dispose());
+            }
+
+            safeScrollToBottom(t);
+            autoScroll = true;
+        });
     }
 
     function pushLine(line: ServerLogLine): void {
