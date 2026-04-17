@@ -155,17 +155,21 @@
 </script>
 
 {#snippet serverRow(server: ManagedServer)}
-    <div class="group relative">
+    <!-- Two-column layout: main select-button is flex-1, trash gets its own
+         fixed-width column so it never overlaps the player count. The icon
+         is always visible (muted) rather than hover-only so the action is
+         discoverable without trial-and-error. -->
+    <div class="flex items-stretch gap-1 rounded-lg transition-colors hover:bg-muted/40">
         <button
             onclick={() => handleSelect(server.id)}
-            class="w-full rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted/40"
+            class="min-w-0 flex-1 rounded-lg px-2 py-2 text-left"
         >
             <div class="flex items-center gap-2">
                 <div
                     class="h-2 w-2 shrink-0 rounded-full {statusDot[server.status]}"
                 ></div>
                 <span
-                    class="flex-1 truncate font-heading text-[11px] font-semibold text-foreground/90 group-hover:pr-5"
+                    class="flex-1 truncate font-heading text-[11px] font-semibold text-foreground/90"
                 >
                     {server.name}
                 </span>
@@ -193,9 +197,9 @@
             <button
                 type="button"
                 onclick={(e: MouseEvent) => openDeleteDialog(server, e)}
-                class="absolute top-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground/0 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 group-focus-within:opacity-100"
+                class="flex w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/35 transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10 focus-visible:text-destructive focus-visible:outline-none"
                 aria-label="Delete {server.name}"
-                title="Delete server"
+                title="Delete {server.name}"
             >
                 <Trash2 size={11} />
             </button>
@@ -341,18 +345,19 @@
             <div class="flex max-h-80 flex-col gap-0.5 overflow-y-auto px-1">
                 {#each list as server (server.id)}
                     {@const isActive = selected?.id === server.id}
-                    <div class="group relative">
+                    <div
+                        class="relative flex items-stretch gap-1 rounded-lg transition-colors
+                            {isActive ? 'bg-primary/8' : 'hover:bg-muted/40'}"
+                    >
+                        {#if isActive}
+                            <span
+                                class="pointer-events-none absolute top-1/2 left-0 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-primary"
+                            ></span>
+                        {/if}
                         <button
                             onclick={() => handleSelect(server.id)}
-                            class="w-full rounded-lg px-2 py-2 text-left transition-colors
-                                {isActive ? 'bg-primary/8' : 'hover:bg-muted/40'}"
+                            class="min-w-0 flex-1 rounded-lg px-2 py-2 text-left"
                         >
-                            {#if isActive}
-                                <span
-                                    class="absolute top-1/2 left-0 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-primary"
-                                ></span>
-                            {/if}
-
                             <div class="flex items-center gap-2.5">
                                 <div
                                     class="h-2 w-2 shrink-0 rounded-full {statusDot[
@@ -412,11 +417,11 @@
                             <button
                                 type="button"
                                 onclick={(e: MouseEvent) => openDeleteDialog(server, e)}
-                                class="absolute top-2 right-2 flex h-5 w-5 items-center justify-center rounded-md opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 group-focus-within:opacity-100"
+                                class="flex w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground/35 transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10 focus-visible:text-destructive focus-visible:outline-none"
                                 aria-label="Delete {server.name}"
-                                title="Delete server"
+                                title="Delete {server.name}"
                             >
-                                <Trash2 size={11} />
+                                <Trash2 size={12} />
                             </button>
                         {/if}
                     </div>
