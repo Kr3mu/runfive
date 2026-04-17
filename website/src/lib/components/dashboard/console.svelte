@@ -1,4 +1,10 @@
 <script lang="ts">
+    import { Terminal, type ITheme } from "@xterm/xterm";
+    import { FitAddon } from "@xterm/addon-fit";
+    import { SearchAddon } from "@xterm/addon-search";
+    import { WebLinksAddon } from "@xterm/addon-web-links";
+    import "@xterm/xterm/css/xterm.css";
+
     import { createQuery, useQueryClient } from "@tanstack/svelte-query";
     import { authQueryOptions } from "$lib/api/auth";
     import {
@@ -14,20 +20,21 @@
     } from "$lib/api/servers";
     import { canServer } from "$lib/permissions.svelte";
     import { serverState } from "$lib/server-state.svelte";
+    import { toast } from "svelte-sonner";
+
     import Search from "@lucide/svelte/icons/search";
     import Trash2 from "@lucide/svelte/icons/trash-2";
     import Download from "@lucide/svelte/icons/download";
     import ArrowRight from "@lucide/svelte/icons/arrow-right";
     import ChevronDown from "@lucide/svelte/icons/chevron-down";
+    import ChevronUp from "@lucide/svelte/icons/chevron-up";
     import X from "@lucide/svelte/icons/x";
     import Play from "@lucide/svelte/icons/play";
     import Square from "@lucide/svelte/icons/square";
     import LoaderCircle from "@lucide/svelte/icons/loader-circle";
     import ShieldAlert from "@lucide/svelte/icons/shield-alert";
     import ServerCrash from "@lucide/svelte/icons/server-crash";
-    import { toast } from "svelte-sonner";
 
-    type LogLevel = "info" | "warn" | "error" | "debug" | "command";
     type SocketState = "idle" | "connecting" | "open" | "closed";
     type ActionState = "start" | "stop" | null;
 
@@ -46,20 +53,41 @@
     );
 
     let runtimeStatus = $state<ServerProcessStatus | null>(null);
-    let logs = $state<ServerLogLine[]>([]);
     let loading = $state(false);
     let socketState = $state<SocketState>("idle");
     let actionState = $state<ActionState>(null);
-    let searchQuery = $state("");
     let searching = $state(false);
+    let searchQuery = $state("");
+    let searchHits = $state(0);
     let commandInput = $state("");
     let autoScroll = $state(true);
-    let consoleEl = $state<HTMLElement | null>(null);
-    let wrapperEl = $state<HTMLElement | null>(null);
+    /**
+     * Raw log-line buffer retained alongside the xterm instance so the
+     * download action can export a clean text file and clear() can repopulate
+     * from state instead of from the terminal's internal buffer. Capped to
+     * match the terminal scrollback so memory stays bounded.
+     */
+    let rawLines = $state<ServerLogLine[]>([]);
+
+    /** Bound to the host <div> that xterm mounts into. */
+    let termHostEl = $state<HTMLDivElement | null>(null);
+    /** Bound to the command <input> so the keyboard shortcut can focus it. */
     let commandInputEl = $state<HTMLInputElement | null>(null);
     let searchInputEl = $state<HTMLInputElement | null>(null);
-    let socketRef = $state<WebSocket | null>(null);
+
+    /** Live xterm instance. Recreated when the mount point changes, never per-server. */
+    let term: Terminal | null = null;
+    let fitAddon: FitAddon | null = null;
+    let searchAddon: SearchAddon | null = null;
+
+    let socketRef: WebSocket | null = null;
     let localLogID = 0;
+
+    /**
+     * Hard cap on the client-side scrollback / raw buffer. Matches the xterm
+     * scrollback so users see exactly as much history as is selectable.
+     */
+    const SCROLLBACK_LINES = 2000;
 
     const activeStatus = $derived.by((): ServerProcessStatus | null => {
         if (runtimeStatus) return runtimeStatus;
@@ -70,16 +98,6 @@
             updatedAt: new Date().toISOString(),
         };
     });
-
-    const filteredLogs = $derived(
-        searchQuery
-            ? logs.filter(
-                  (line) =>
-                      line.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                      line.stream.toLowerCase().includes(searchQuery.toLowerCase()),
-              )
-            : logs,
-    );
 
     const statusLabel = {
         running: "Running",
@@ -94,22 +112,6 @@
         stopped: "border-border bg-muted/40 text-muted-foreground",
         crashed: "border-destructive/30 bg-destructive/10 text-destructive",
     } as const;
-
-    const levelColors: Record<LogLevel, string> = {
-        info: "text-blue-400",
-        warn: "text-primary",
-        error: "text-destructive",
-        debug: "text-muted-foreground/60",
-        command: "text-chart-2",
-    };
-
-    const levelTag: Record<LogLevel, { text: string; class: string }> = {
-        info: { text: "INF", class: "text-blue-400/60" },
-        warn: { text: "WRN", class: "text-primary/60" },
-        error: { text: "ERR", class: "text-destructive/60" },
-        debug: { text: "SYS", class: "text-muted-foreground/35" },
-        command: { text: "CMD", class: "text-chart-2/60" },
-    };
 
     const canStart = $derived(
         Boolean(selectedServer) &&
@@ -132,6 +134,41 @@
             (activeStatus?.status !== "starting" && activeStatus?.status !== "running"),
     );
 
+    /**
+     * xterm theme pulled from the panel's palette. Kept in sync with the
+     * Tailwind tokens in app.css so dark / light mode flips come along for
+     * free via the parent theme switcher.
+     */
+    function buildTheme(): ITheme {
+        return {
+            background: "#00000000",
+            foreground: "rgb(226, 232, 240)",
+            cursor: "rgb(226, 232, 240)",
+            cursorAccent: "#0f172a",
+            selectionBackground: "rgba(253, 224, 71, 0.35)",
+            selectionForeground: undefined,
+            selectionInactiveBackground: "rgba(148, 163, 184, 0.25)",
+
+            black: "#0f172a",
+            red: "#f87171",
+            green: "#4ade80",
+            yellow: "#fbbf24",
+            blue: "#60a5fa",
+            magenta: "#c084fc",
+            cyan: "#22d3ee",
+            white: "rgb(226, 232, 240)",
+
+            brightBlack: "#475569",
+            brightRed: "#fca5a5",
+            brightGreen: "#86efac",
+            brightYellow: "#fde68a",
+            brightBlue: "#93c5fd",
+            brightMagenta: "#d8b4fe",
+            brightCyan: "#67e8f9",
+            brightWhite: "#f8fafc",
+        };
+    }
+
     function nextLocalLogID(): number {
         localLogID -= 1;
         return localLogID;
@@ -146,51 +183,91 @@
         };
     }
 
-    function pushLine(line: ServerLogLine): void {
-        logs = [...logs.slice(-2999), line];
-        requestAnimationFrame(scrollToBottom);
-    }
-
-    function mergeLines(lines: ServerLogLine[]): void {
-        logs = lines.slice(-3000);
-        requestAnimationFrame(scrollToBottom);
-    }
-
-    function lineLevel(line: ServerLogLine): LogLevel {
-        if (line.stream === "stderr") return "error";
-        if (line.stream === "warning") return "warn";
-        if (line.stream === "stdin") return "command";
-        if (line.stream === "system") return "debug";
-        return "info";
-    }
-
-    function lineTimestamp(line: ServerLogLine): string {
-        return new Date(line.timestamp).toLocaleTimeString("en-GB", {
+    function formatTimestamp(isoTimestamp: string): string {
+        return new Date(isoTimestamp).toLocaleTimeString("en-GB", {
             hour: "2-digit",
             minute: "2-digit",
             second: "2-digit",
         });
     }
 
-    function scrollToBottom(): void {
-        if (consoleEl && autoScroll) {
-            consoleEl.scrollTop = consoleEl.scrollHeight;
-        }
+    /**
+     * xterm decoration that renders the line's timestamp in the left gutter.
+     * The element is created inside xterm's decoration layer so it scrolls
+     * with the content, but it sits visually outside the canvas thanks to a
+     * negative translateX and a matching padding-left on the host. Because
+     * the gutter lives outside the selectable cell grid, text selection in
+     * the terminal never picks it up — solving the "copy captures timestamp
+     * and line number" pain of the old DOM renderer.
+     */
+    function attachTimestampGutter(t: Terminal, timestamp: string): void {
+        const marker = t.registerMarker(0);
+        if (!marker) return;
+
+        const decoration = t.registerDecoration({
+            marker,
+            anchor: "left",
+            x: 0,
+            width: 1,
+            height: 1,
+            layer: "top",
+        });
+        if (!decoration) return;
+
+        decoration.onRender((el: HTMLElement): void => {
+            el.classList.add("console-timestamp-gutter");
+            el.textContent = formatTimestamp(timestamp);
+        });
+
+        // Drop the decoration once the line scrolls out of the ring buffer
+        // so xterm's DOM node pool stays bounded.
+        marker.onDispose((): void => decoration.dispose());
     }
 
-    function handleScroll(): void {
-        if (!consoleEl) return;
-        const { scrollTop, scrollHeight, clientHeight } = consoleEl;
-        autoScroll = scrollHeight - scrollTop - clientHeight < 40;
+    function writeLine(line: ServerLogLine): void {
+        if (!term) return;
+        attachTimestampGutter(term, line.timestamp);
+        term.writeln(line.message);
+        if (autoScroll) term.scrollToBottom();
+    }
+
+    function replaceBuffer(lines: ServerLogLine[]): void {
+        if (!term) return;
+        term.clear();
+        rawLines = [];
+        for (const line of lines.slice(-SCROLLBACK_LINES)) {
+            rawLines.push(line);
+            attachTimestampGutter(term, line.timestamp);
+            term.writeln(line.message);
+        }
+        term.scrollToBottom();
+        autoScroll = true;
+    }
+
+    function pushLine(line: ServerLogLine): void {
+        rawLines = [...rawLines.slice(-(SCROLLBACK_LINES - 1)), line];
+        writeLine(line);
     }
 
     function clearConsole(): void {
-        logs = [];
+        if (!term) return;
+        term.clear();
+        rawLines = [];
+    }
+
+    /** Strips ANSI SGR sequences so the downloaded .log is plain text. */
+    function stripAnsi(s: string): string {
+        // Match the minimal set of SGR / CSI sequences fxserver and the
+        // panel emit — colour, formatting, cursor moves aren't used in logs.
+        return s.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
     }
 
     function downloadLogs(): void {
-        const content = logs
-            .map((line) => `[${lineTimestamp(line)}] [${line.stream.toUpperCase()}] ${line.message}`)
+        const content = rawLines
+            .map(
+                (line: ServerLogLine): string =>
+                    `[${formatTimestamp(line.timestamp)}] ${stripAnsi(line.message)}`,
+            )
             .join("\n");
         const blob = new Blob([content], { type: "text/plain" });
         const url = URL.createObjectURL(blob);
@@ -203,52 +280,85 @@
 
     function openSearch(): void {
         searching = true;
-        requestAnimationFrame(() => searchInputEl?.focus());
+        requestAnimationFrame((): void => searchInputEl?.focus());
     }
 
     function closeSearch(): void {
         searching = false;
         searchQuery = "";
+        searchHits = 0;
+        searchAddon?.clearDecorations();
     }
+
+    function runSearch(next: boolean): void {
+        if (!searchAddon) return;
+        const q = searchQuery.trim();
+        if (!q) {
+            searchAddon.clearDecorations();
+            searchHits = 0;
+            return;
+        }
+        const opts = {
+            caseSensitive: false,
+            wholeWord: false,
+            regex: false,
+            decorations: {
+                matchBackground: "rgba(253, 224, 71, 0.35)",
+                matchOverviewRuler: "rgba(253, 224, 71, 0.55)",
+                activeMatchBackground: "rgba(253, 224, 71, 0.6)",
+                activeMatchColorOverviewRuler: "rgba(253, 224, 71, 0.9)",
+            },
+        };
+        if (next) {
+            searchAddon.findNext(q, opts);
+        } else {
+            searchAddon.findPrevious(q, opts);
+        }
+    }
+
+    $effect((): void => {
+        // When the query changes, jump to the first match. Reactive so Svelte
+        // fires this on every keystroke without a manual handler on the input.
+        searchQuery;
+        if (!searching) return;
+        runSearch(true);
+    });
 
     function openSocket(serverId: string, reconnect: () => void): void {
         socketRef = new WebSocket(serverLogsWebSocketURL(serverId));
         socketState = "connecting";
 
-        socketRef.addEventListener("open", () => {
+        socketRef.addEventListener("open", (): void => {
             socketState = "open";
         });
 
-        socketRef.addEventListener("message", (raw: MessageEvent<string>) => {
+        socketRef.addEventListener("message", (raw: MessageEvent<string>): void => {
             const payload = JSON.parse(raw.data) as ServerConsoleEvent;
             if (payload.type === "snapshot") {
                 if (payload.status) runtimeStatus = payload.status;
-                if (payload.lines) mergeLines(payload.lines);
+                if (payload.lines) replaceBuffer(payload.lines);
                 loading = false;
                 return;
             }
-
             if (payload.type === "status" && payload.status) {
                 runtimeStatus = payload.status;
                 void queryClient.invalidateQueries({ queryKey: ["servers"] });
                 return;
             }
-
             if (payload.type === "line" && payload.line) {
                 pushLine(payload.line);
                 return;
             }
-
             if (payload.type === "error" && payload.error) {
                 pushLine(makeLocalLine("system", payload.error));
             }
         });
 
-        socketRef.addEventListener("error", () => {
+        socketRef.addEventListener("error", (): void => {
             socketState = "closed";
         });
 
-        socketRef.addEventListener("close", () => {
+        socketRef.addEventListener("close", (): void => {
             socketState = "closed";
             socketRef = null;
             reconnect();
@@ -257,14 +367,13 @@
 
     async function handleStart(): Promise<void> {
         if (!selectedServer || !canStart) return;
-
         actionState = "start";
         try {
             runtimeStatus = await startServer(selectedServer.id);
             await queryClient.invalidateQueries({ queryKey: ["servers"] });
             toast.success(`Starting ${selectedServer.name}`);
-        } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : "Failed to start server";
+        } catch (err: unknown) {
+            const message: string = err instanceof Error ? err.message : "Failed to start server";
             toast.error(message);
             pushLine(makeLocalLine("system", message));
         } finally {
@@ -274,14 +383,13 @@
 
     async function handleStop(): Promise<void> {
         if (!selectedServer || !canStop) return;
-
         actionState = "stop";
         try {
             runtimeStatus = await stopServer(selectedServer.id);
             await queryClient.invalidateQueries({ queryKey: ["servers"] });
             toast.success(`Stopping ${selectedServer.name}`);
-        } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : "Failed to stop server";
+        } catch (err: unknown) {
+            const message: string = err instanceof Error ? err.message : "Failed to stop server";
             toast.error(message);
             pushLine(makeLocalLine("system", message));
         } finally {
@@ -290,32 +398,109 @@
     }
 
     function sendCommand(): void {
-        const command = commandInput.trim();
+        const command: string = commandInput.trim();
         if (!command || !socketRef || socketState !== "open") return;
         socketRef.send(JSON.stringify({ type: "command", command }));
         commandInput = "";
         autoScroll = true;
+        term?.scrollToBottom();
     }
 
     function handleKeydown(e: KeyboardEvent): void {
         if ((e.ctrlKey || e.metaKey) && e.key === "f") {
             e.preventDefault();
             openSearch();
+            return;
         }
-        if (e.key === "Escape" && searching) {
+        if (!searching) return;
+        if (e.key === "Escape") {
             closeSearch();
             commandInputEl?.focus();
+        } else if (e.key === "Enter") {
+            e.preventDefault();
+            runSearch(!e.shiftKey);
         }
     }
 
-    $effect(() => {
-        filteredLogs;
-        requestAnimationFrame(scrollToBottom);
+    // Terminal lifecycle: recreate when the mount node appears. Disposed on
+    // unmount so a page-level transition doesn't leak an xterm instance.
+    $effect((): (() => void) | void => {
+        if (!termHostEl) return;
+
+        const t = new Terminal({
+            scrollback: SCROLLBACK_LINES,
+            fontFamily:
+                'ui-monospace, SFMono-Regular, Menlo, Monaco, "JetBrains Mono", "Fira Code", "Liberation Mono", monospace',
+            fontSize: 12,
+            lineHeight: 1.35,
+            letterSpacing: 0,
+            cursorBlink: false,
+            cursorStyle: "block",
+            disableStdin: true,
+            convertEol: true,
+            allowProposedApi: true,
+            allowTransparency: true,
+            theme: buildTheme(),
+            rightClickSelectsWord: true,
+            scrollOnUserInput: false,
+        });
+
+        const fit = new FitAddon();
+        const search = new SearchAddon();
+        const links = new WebLinksAddon();
+        t.loadAddon(fit);
+        t.loadAddon(search);
+        t.loadAddon(links);
+        t.open(termHostEl);
+
+        // Sync autoscroll to the user's viewport: if they scroll up we stop
+        // pinning to the bottom; the "jump to latest" pill re-arms it.
+        t.onScroll((): void => {
+            if (!t) return;
+            const viewportY = t.buffer.active.viewportY;
+            const base = t.buffer.active.baseY;
+            autoScroll = viewportY >= base;
+        });
+
+        const ro = new ResizeObserver((): void => {
+            try {
+                fit.fit();
+            } catch {
+                // Terminal not visible yet (tab hidden, display:none, etc.).
+                // Fit throws instead of returning — swallow and retry on the
+                // next observer tick.
+            }
+        });
+        ro.observe(termHostEl);
+
+        term = t;
+        fitAddon = fit;
+        searchAddon = search;
+
+        // Re-render any buffered history into the fresh terminal so hot-
+        // reload and tab switches don't lose the backlog.
+        if (rawLines.length > 0) {
+            for (const line of rawLines) {
+                attachTimestampGutter(t, line.timestamp);
+                t.writeln(line.message);
+            }
+            t.scrollToBottom();
+        }
+
+        return (): void => {
+            ro.disconnect();
+            t.dispose();
+            term = null;
+            fitAddon = null;
+            searchAddon = null;
+        };
     });
 
-    $effect(() => {
-        const serverId = selectedServer?.id;
-        const readAllowed = canReadConsole;
+    // Per-server lifecycle: wipe buffer, fetch tail, open websocket, close on
+    // server switch / permission change.
+    $effect((): (() => void) | void => {
+        const serverId: string | undefined = selectedServer?.id;
+        const readAllowed: boolean = canReadConsole;
 
         if (typeof window === "undefined") return;
 
@@ -323,7 +508,7 @@
             socketRef?.close(1000, "switch");
             socketRef = null;
             runtimeStatus = null;
-            logs = [];
+            replaceBuffer([]);
             loading = false;
             socketState = "idle";
             return;
@@ -332,7 +517,7 @@
         let disposed = false;
         let reconnectTimer: number | null = null;
 
-        logs = [];
+        replaceBuffer([]);
         runtimeStatus = null;
         loading = true;
 
@@ -342,7 +527,7 @@
                 window.clearTimeout(reconnectTimer);
                 reconnectTimer = null;
             }
-            openSocket(serverId, () => {
+            openSocket(serverId, (): void => {
                 if (disposed) return;
                 reconnectTimer = window.setTimeout(connect, 1500);
             });
@@ -356,10 +541,10 @@
                 ]);
                 if (disposed) return;
                 runtimeStatus = status;
-                mergeLines(initialLogs);
-            } catch (error: unknown) {
+                replaceBuffer(initialLogs);
+            } catch (err: unknown) {
                 if (disposed) return;
-                const message = error instanceof Error ? error.message : "Failed to load console";
+                const message: string = err instanceof Error ? err.message : "Failed to load console";
                 pushLine(makeLocalLine("system", message));
             } finally {
                 if (disposed) return;
@@ -381,11 +566,13 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
-    bind:this={wrapperEl}
     onkeydown={handleKeydown}
     class="relative flex h-full flex-col overflow-hidden bg-background"
     tabindex="-1"
+    role="region"
+    aria-label="Server console"
 >
     {#if !selectedServer}
         <div class="flex h-full items-center justify-center px-6 text-sm text-muted-foreground/50">
@@ -404,28 +591,7 @@
             </div>
         </div>
     {:else}
-        {#if searching}
-            <div class="absolute top-0 right-0 left-0 z-20 flex items-center gap-2 border-b border-border bg-card px-3 py-2">
-                <Search size={14} class="shrink-0 text-muted-foreground/40" />
-                <input
-                    bind:this={searchInputEl}
-                    type="text"
-                    bind:value={searchQuery}
-                    placeholder="Filter logs..."
-                    class="h-8 flex-1 rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground/40 focus:border-primary focus:ring-1 focus:ring-primary"
-                />
-                <span class="shrink-0 text-xs text-muted-foreground/40">
-                    {filteredLogs.length} results
-                </span>
-                <button
-                    onclick={closeSearch}
-                    class="shrink-0 rounded-md p-1.5 text-muted-foreground/40 transition-colors hover:bg-muted hover:text-foreground"
-                >
-                    <X size={14} />
-                </button>
-            </div>
-        {/if}
-
+        <!-- Header -->
         <div class="shrink-0 border-b border-border bg-card/80 px-3 py-2 backdrop-blur-sm">
             <div class="flex flex-wrap items-center justify-between gap-2">
                 <div class="min-w-0">
@@ -491,58 +657,89 @@
             </div>
         </div>
 
-        <div
-            bind:this={consoleEl}
-            onscroll={handleScroll}
-            class="console-scroll flex-1 overflow-y-auto overflow-x-hidden font-mono text-xs leading-[1.7]"
-        >
-            {#each filteredLogs as line, i (line.id)}
-                {@const level = lineLevel(line)}
-                <div class="flex items-baseline border-b border-border/10 px-3 py-0.75 transition-colors hover:bg-muted/20">
-                    <span class="w-6 shrink-0 select-none text-right text-[11px] text-muted-foreground/25">{i + 1}</span>
-                    <span class="mx-2 shrink-0 select-none text-[11px] text-muted-foreground/35">{lineTimestamp(line)}</span>
-                    <span class="mr-2 w-7 shrink-0 select-none text-right text-[11px] font-semibold {levelTag[level].class}">{levelTag[level].text}</span>
-                    <span class="{levelColors[level]} break-all">{line.message}</span>
+        <!-- Search bar (floats above the terminal when open) -->
+        {#if searching}
+            <div class="absolute top-[58px] right-2 left-2 z-20 flex items-center gap-2 rounded-md border border-border bg-card/95 px-2 py-1.5 shadow-lg backdrop-blur-sm">
+                <Search size={13} class="shrink-0 text-muted-foreground/50" />
+                <input
+                    bind:this={searchInputEl}
+                    type="text"
+                    bind:value={searchQuery}
+                    placeholder="Find in console…"
+                    class="h-7 flex-1 rounded-sm bg-transparent text-[12.5px] text-foreground outline-none placeholder:text-muted-foreground/40"
+                />
+                <div class="flex items-center gap-0.5">
+                    <button
+                        type="button"
+                        onclick={() => runSearch(false)}
+                        class="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground/60 hover:bg-muted hover:text-foreground"
+                        aria-label="Previous match"
+                        title="Previous match (Shift+Enter)"
+                    >
+                        <ChevronUp size={13} />
+                    </button>
+                    <button
+                        type="button"
+                        onclick={() => runSearch(true)}
+                        class="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground/60 hover:bg-muted hover:text-foreground"
+                        aria-label="Next match"
+                        title="Next match (Enter)"
+                    >
+                        <ChevronDown size={13} />
+                    </button>
                 </div>
-            {/each}
+                <button
+                    onclick={closeSearch}
+                    class="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground/40 hover:bg-muted hover:text-foreground"
+                    aria-label="Close search"
+                >
+                    <X size={13} />
+                </button>
+            </div>
+        {/if}
 
-            {#if filteredLogs.length === 0}
-                <div class="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground/25">
-                    {#if loading}
-                        <span class="inline-flex items-center gap-2">
-                            <LoaderCircle size={14} class="animate-spin" />
-                            Loading console…
-                        </span>
-                    {:else if activeStatus?.status === "crashed"}
-                        <span class="inline-flex items-center gap-2">
-                            <ServerCrash size={14} />
-                            Server crashed. Start it again to continue streaming logs.
-                        </span>
-                    {:else if searchQuery}
-                        <span>No matching entries</span>
-                    {:else}
-                        <span>No output yet</span>
-                    {/if}
+        <!-- Terminal body -->
+        <div class="relative flex-1 overflow-hidden">
+            <div bind:this={termHostEl} class="console-host absolute inset-0"></div>
+
+            {#if loading}
+                <div class="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-sm">
+                    <span class="inline-flex items-center gap-2 text-sm text-muted-foreground/60">
+                        <LoaderCircle size={14} class="animate-spin" />
+                        Loading console…
+                    </span>
                 </div>
+            {:else if activeStatus?.status === "crashed" && rawLines.length === 0}
+                <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <span class="inline-flex items-center gap-2 text-sm text-muted-foreground/40">
+                        <ServerCrash size={14} />
+                        Server crashed. Start it again to continue streaming logs.
+                    </span>
+                </div>
+            {:else if rawLines.length === 0}
+                <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <span class="text-sm text-muted-foreground/30">No output yet</span>
+                </div>
+            {/if}
+
+            {#if !autoScroll}
+                <button
+                    onclick={() => {
+                        autoScroll = true;
+                        term?.scrollToBottom();
+                    }}
+                    class="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border bg-card/95 px-3 py-1.5 text-xs text-muted-foreground shadow-lg backdrop-blur-sm transition-colors hover:text-foreground"
+                >
+                    <ChevronDown size={12} />
+                    Jump to latest
+                </button>
             {/if}
         </div>
 
-        {#if !autoScroll}
-            <button
-                onclick={() => {
-                    autoScroll = true;
-                    scrollToBottom();
-                }}
-                class="absolute bottom-14 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground shadow-lg transition-colors hover:text-foreground"
-            >
-                <ChevronDown size={12} />
-                New logs below
-            </button>
-        {/if}
-
+        <!-- Footer: command input + action toolbar -->
         <div class="shrink-0 border-t border-border bg-card">
             <form
-                onsubmit={(e) => {
+                onsubmit={(e: SubmitEvent): void => {
                     e.preventDefault();
                     sendCommand();
                 }}
@@ -554,9 +751,11 @@
                         bind:this={commandInputEl}
                         type="text"
                         bind:value={commandInput}
-                        placeholder={canExecuteConsole ? "Enter command..." : "Console input requires execute permission"}
+                        placeholder={canExecuteConsole ? "Enter command…" : "Console input requires execute permission"}
                         disabled={commandDisabled}
-                        class="h-9 w-full rounded-md border border-border bg-background pl-7 pr-3 text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground/30 focus:border-primary focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
+                        autocomplete="off"
+                        spellcheck="false"
+                        class="h-9 w-full rounded-md border border-border bg-background pr-3 pl-7 font-mono text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground/30 focus:border-primary focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
                     />
                 </div>
 
@@ -564,7 +763,7 @@
                     type="submit"
                     disabled={!commandInput.trim() || commandDisabled}
                     class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-30"
-                    title="Send command"
+                    title="Send command (Enter)"
                 >
                     <ArrowRight size={16} />
                 </button>
@@ -575,22 +774,24 @@
                     type="button"
                     onclick={openSearch}
                     class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    title="Search (Ctrl+F)"
+                    title="Find in console (Ctrl+F)"
                 >
                     <Search size={15} />
                 </button>
                 <button
                     type="button"
                     onclick={downloadLogs}
-                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    title="Download logs"
+                    disabled={rawLines.length === 0}
+                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35"
+                    title="Download current log buffer"
                 >
                     <Download size={15} />
                 </button>
                 <button
                     type="button"
                     onclick={clearConsole}
-                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                    disabled={rawLines.length === 0}
+                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-35"
                     title="Clear console"
                 >
                     <Trash2 size={15} />
@@ -599,3 +800,63 @@
         </div>
     {/if}
 </div>
+
+<style>
+    /*
+     * Make room on the left side of the terminal for the timestamp gutter.
+     * xterm renders its canvas into an absolutely positioned child, so we
+     * apply the padding on the host and let the canvas inherit the indent.
+     */
+    .console-host :global(.xterm) {
+        padding: 4px 4px 4px 72px;
+    }
+    .console-host :global(.xterm-viewport) {
+        background-color: transparent !important;
+        /* Neutralise xterm's default scrollbar styling so it matches the
+           rest of the panel (subtle, on-hover emphasis). */
+        scrollbar-width: thin;
+        scrollbar-color: rgba(148, 163, 184, 0.25) transparent;
+    }
+    .console-host :global(.xterm-viewport::-webkit-scrollbar) {
+        width: 8px;
+    }
+    .console-host :global(.xterm-viewport::-webkit-scrollbar-thumb) {
+        background-color: rgba(148, 163, 184, 0.25);
+        border-radius: 4px;
+    }
+    .console-host :global(.xterm-viewport::-webkit-scrollbar-thumb:hover) {
+        background-color: rgba(148, 163, 184, 0.45);
+    }
+    /*
+     * Timestamp gutter decoration.
+     *
+     * xterm mounts decorations inside .xterm-decoration-container which sits
+     * over the canvas area at the cell-grid's origin. We translate the element
+     * into the padding-left strip via a negative X offset and lock the width
+     * so every row's timestamp is aligned regardless of message length.
+     *
+     * user-select:none is the important part: the gutter element is part of
+     * the DOM but xterm's selection model draws from the cell grid only, so
+     * text copies never include these glyphs. That's the key reason this
+     * layout solves the copy/selection pain of the previous DOM renderer.
+     */
+    :global(.console-timestamp-gutter) {
+        position: absolute;
+        left: -68px;
+        top: 0;
+        width: 64px;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        padding-right: 6px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "JetBrains Mono",
+            "Fira Code", "Liberation Mono", monospace;
+        font-size: 10.5px;
+        color: rgba(148, 163, 184, 0.45);
+        pointer-events: none;
+        user-select: none;
+        -webkit-user-select: none;
+        white-space: nowrap;
+    }
+</style>
