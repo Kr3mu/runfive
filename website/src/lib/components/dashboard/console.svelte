@@ -192,56 +192,123 @@
     }
 
     /**
-     * xterm decoration that renders the line's timestamp in the left gutter.
-     * The element is created inside xterm's decoration layer so it scrolls
-     * with the content, but it sits visually outside the canvas thanks to a
-     * negative translateX and a matching padding-left on the host. Because
-     * the gutter lives outside the selectable cell grid, text selection in
-     * the terminal never picks it up — solving the "copy captures timestamp
-     * and line number" pain of the old DOM renderer.
+     * Writes a log line to xterm and attaches a timestamp decoration to its
+     * starting row in the left gutter.
+     *
+     * xterm's write pipeline is asynchronous: multiple write() calls in a
+     * single synchronous block all queue against the same "current" cursor
+     * position, so registering a marker before a write ends up anchoring
+     * every marker to the same row. The fix is to snapshot the starting row
+     * inside the write callback, once the parser has advanced the cursor,
+     * and then `registerMarker(-rowsUsed)` to walk back to the first visual
+     * row of the just-written message (which matters when a line wrapped
+     * across the viewport width).
+     *
+     * The decoration element is mounted inside xterm's own decoration
+     * layer, so it scrolls with the content. `user-select: none` + the
+     * fact that xterm's selection model reads from the cell grid (not the
+     * DOM) means drag-to-copy never captures the timestamp — which is the
+     * whole reason we can show it visibly without breaking the copy flow.
      */
-    function attachTimestampGutter(t: Terminal, timestamp: string): void {
-        const marker = t.registerMarker(0);
-        if (!marker) return;
+    function writeAndAnnotate(t: Terminal, line: ServerLogLine, startYBefore: number): void {
+        t.write(line.message + "\r\n", (): void => {
+            const endY = t.buffer.active.baseY + t.buffer.active.cursorY;
+            const rowsUsed = Math.max(1, endY - startYBefore);
+            const marker = t.registerMarker(-rowsUsed);
+            if (!marker) return;
 
-        const decoration = t.registerDecoration({
-            marker,
-            anchor: "left",
-            x: 0,
-            width: 1,
-            height: 1,
-            layer: "top",
+            const decoration = t.registerDecoration({
+                marker,
+                anchor: "left",
+                x: 0,
+                width: 1,
+                height: 1,
+                layer: "top",
+            });
+            if (!decoration) return;
+
+            decoration.onRender((el: HTMLElement): void => {
+                el.classList.add("console-timestamp-gutter");
+                el.textContent = formatTimestamp(line.timestamp);
+            });
+
+            // Drop the decoration once the marker scrolls out of the
+            // scrollback ring so xterm's DOM node pool stays bounded.
+            marker.onDispose((): void => decoration.dispose());
         });
-        if (!decoration) return;
+    }
 
-        decoration.onRender((el: HTMLElement): void => {
-            el.classList.add("console-timestamp-gutter");
-            el.textContent = formatTimestamp(timestamp);
+    /**
+     * Flushes any queued xterm writes and then invokes `capture`, passing
+     * the live starting Y. Used as a barrier before `writeAndAnnotate` so
+     * the captured startY reflects every prior pending write.
+     */
+    function withFlushedStart(t: Terminal, run: (startY: number) => void): void {
+        t.write("", (): void => {
+            run(t.buffer.active.baseY + t.buffer.active.cursorY);
         });
-
-        // Drop the decoration once the line scrolls out of the ring buffer
-        // so xterm's DOM node pool stays bounded.
-        marker.onDispose((): void => decoration.dispose());
     }
 
     function writeLine(line: ServerLogLine): void {
         if (!term) return;
-        attachTimestampGutter(term, line.timestamp);
-        term.writeln(line.message);
-        if (autoScroll) term.scrollToBottom();
+        const t = term;
+        withFlushedStart(t, (startY: number): void => {
+            writeAndAnnotate(t, line, startY);
+        });
+        if (autoScroll) t.scrollToBottom();
     }
 
     function replaceBuffer(lines: ServerLogLine[]): void {
         if (!term) return;
-        term.clear();
+        const t = term;
+        t.clear();
         rawLines = [];
-        for (const line of lines.slice(-SCROLLBACK_LINES)) {
+        const trimmed = lines.slice(-SCROLLBACK_LINES);
+        for (const line of trimmed) {
             rawLines.push(line);
-            attachTimestampGutter(term, line.timestamp);
-            term.writeln(line.message);
         }
-        term.scrollToBottom();
-        autoScroll = true;
+        // Chain the batch through the same flush-then-write barrier so each
+        // message's startY snapshot reflects the previous write having been
+        // parsed. Doing it serially via callbacks is the only reliable way
+        // to keep marker positions in lockstep with the content for a burst
+        // of synchronous writes (the initial snapshot pushes 200 lines at
+        // once).
+        let i = 0;
+        const step = (): void => {
+            if (i >= trimmed.length) {
+                t.scrollToBottom();
+                autoScroll = true;
+                return;
+            }
+            const current = trimmed[i++];
+            t.write("", (): void => {
+                const startY = t.buffer.active.baseY + t.buffer.active.cursorY;
+                t.write(current.message + "\r\n", (): void => {
+                    const endY = t.buffer.active.baseY + t.buffer.active.cursorY;
+                    const rowsUsed = Math.max(1, endY - startY);
+                    const marker = t.registerMarker(-rowsUsed);
+                    if (marker) {
+                        const decoration = t.registerDecoration({
+                            marker,
+                            anchor: "left",
+                            x: 0,
+                            width: 1,
+                            height: 1,
+                            layer: "top",
+                        });
+                        if (decoration) {
+                            decoration.onRender((el: HTMLElement): void => {
+                                el.classList.add("console-timestamp-gutter");
+                                el.textContent = formatTimestamp(current.timestamp);
+                            });
+                            marker.onDispose((): void => decoration.dispose());
+                        }
+                    }
+                    step();
+                });
+            });
+        };
+        step();
     }
 
     function pushLine(line: ServerLogLine): void {
@@ -478,13 +545,11 @@
         searchAddon = search;
 
         // Re-render any buffered history into the fresh terminal so hot-
-        // reload and tab switches don't lose the backlog.
+        // reload and tab switches don't lose the backlog. Replay goes
+        // through replaceBuffer's serial barrier so timestamps line up.
         if (rawLines.length > 0) {
-            for (const line of rawLines) {
-                attachTimestampGutter(t, line.timestamp);
-                t.writeln(line.message);
-            }
-            t.scrollToBottom();
+            const replay = [...rawLines];
+            replaceBuffer(replay);
         }
 
         return (): void => {
