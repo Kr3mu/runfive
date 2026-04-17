@@ -26,6 +26,10 @@ import (
 const (
 	configFilename = "server.toml"
 	debounceDelay  = 500 * time.Millisecond
+	// trashDirName holds soft-deleted server directories so fat-finger DELETEs
+	// can be reversed. The leading dot keeps it hidden from tooling and the
+	// Reload scan deliberately ignores it.
+	trashDirName = ".trash"
 )
 
 // ServerConfig is the on-disk schema for a single server's configuration.
@@ -148,6 +152,9 @@ func (r *Registry) Reload() error {
 			continue
 		}
 		id := de.Name()
+		if id == trashDirName {
+			continue
+		}
 		path := filepath.Join(r.rootDir, id, configFilename)
 
 		cfg, err := readServerConfig(path)
@@ -249,6 +256,9 @@ func (r *Registry) addSubdirWatches(w *fsnotify.Watcher) {
 	}
 	for _, sub := range subs {
 		if !sub.IsDir() {
+			continue
+		}
+		if sub.Name() == trashDirName {
 			continue
 		}
 		if err := w.Add(filepath.Join(r.rootDir, sub.Name())); err != nil {
@@ -448,6 +458,190 @@ func (r *Registry) Create(name, artifactVersion, licenseKey string, port, maxPla
 		return models.ManagedServer{}, fmt.Errorf("server %s missing from cache after create", dirID)
 	}
 	return toManagedServer(e), nil
+}
+
+// UpdatePatch is a partial mutation of a server's on-disk config. A nil field
+// means "leave this value untouched"; otherwise the dereferenced value wins.
+// For the three string fields that meaningfully carry "cleared" as state
+// (LicenseKey, EnforceGameBuild, OneSync), an empty string resets the value;
+// a non-empty string replaces it. ResourcesEnsure replaces the full list,
+// including resetting it to an empty slice.
+type UpdatePatch struct {
+	// Name is the human-readable display name. Cannot be cleared — fxserver
+	// refuses to start with an empty sv_hostname and the registry guards it.
+	Name *string
+	// ArtifactVersion is the fxserver build identifier. Callers are expected
+	// to have installed the artifact before calling Update; the registry
+	// cannot install on their behalf because that path is async.
+	ArtifactVersion *string
+	// Port is the TCP/UDP endpoint port. Zero means "let the registry allocate
+	// the next free slot", matching Create semantics.
+	Port *int
+	// MaxPlayers is sv_maxclients. Zero means "use the panel default".
+	MaxPlayers *int
+	// EnforceGameBuild feeds sv_enforceGameBuild. Empty string clears it.
+	EnforceGameBuild *string
+	// OneSync is the gameplay.onesync selector (on / legacy / infinity / off).
+	// Empty string clears it; the launcher then omits the +set onesync arg.
+	OneSync *string
+	// ResourcesEnsure replaces the full resources.ensure list when non-nil.
+	ResourcesEnsure *[]string
+	// LicenseKey is the plaintext Cfx.re key. Empty string removes the stored
+	// ciphertext; a value starting with "cfxk_" is re-encrypted and stored.
+	LicenseKey *string
+}
+
+// allowedOneSync is the static allow-list of onesync modes accepted by
+// fxserver. Anything outside this set is rejected before we touch disk to
+// prevent typos that would only surface at launch time.
+var allowedOneSync = map[string]struct{}{
+	"":         {},
+	"on":       {},
+	"legacy":   {},
+	"infinity": {},
+	"off":      {},
+}
+
+// Update merges a partial patch into the on-disk config for id and rebuilds
+// the in-memory cache. Port collisions follow the same rule as Create — the
+// write succeeds but the entry may end up flagged as invalid on reload, which
+// the operator can resolve by switching ports or rolling back the change.
+//
+// IDs are treated as stable across updates: renaming a server changes the
+// display name in server.toml but never the directory name, so RBAC rows that
+// reference the ID keep pointing at the right resource.
+func (r *Registry) Update(id string, patch *UpdatePatch) (models.ManagedServer, error) {
+	if patch == nil {
+		return models.ManagedServer{}, fmt.Errorf("update patch is required")
+	}
+
+	r.mu.RLock()
+	existing, ok := r.entries[id]
+	r.mu.RUnlock()
+	if !ok {
+		return models.ManagedServer{}, fmt.Errorf("server %s not found", id)
+	}
+
+	// Work on a copy so a mid-merge failure cannot mutate the cached entry.
+	cfg := existing.config
+
+	if patch.Name != nil {
+		trimmed := strings.TrimSpace(*patch.Name)
+		if trimmed == "" {
+			return models.ManagedServer{}, fmt.Errorf("server name cannot be cleared")
+		}
+		cfg.Name = trimmed
+	}
+
+	if patch.ArtifactVersion != nil {
+		trimmed := strings.TrimSpace(*patch.ArtifactVersion)
+		if trimmed == "" {
+			return models.ManagedServer{}, fmt.Errorf("artifact version cannot be cleared")
+		}
+		if r.artifacts != nil && !r.artifacts.IsInstalled(trimmed) {
+			return models.ManagedServer{}, fmt.Errorf("artifact version %s is not installed", trimmed)
+		}
+		cfg.ArtifactVersion = trimmed
+	}
+
+	if patch.Port != nil {
+		resolved, err := r.resolvePort(*patch.Port)
+		if err != nil {
+			return models.ManagedServer{}, err
+		}
+		cfg.Network.Port = resolved
+	}
+
+	if patch.MaxPlayers != nil {
+		resolved, err := resolveMaxPlayers(*patch.MaxPlayers)
+		if err != nil {
+			return models.ManagedServer{}, err
+		}
+		cfg.Network.MaxClients = resolved
+	}
+
+	if patch.EnforceGameBuild != nil {
+		cfg.Network.EnforceGameBuild = strings.TrimSpace(*patch.EnforceGameBuild)
+	}
+
+	if patch.OneSync != nil {
+		value := strings.TrimSpace(*patch.OneSync)
+		if _, ok := allowedOneSync[value]; !ok {
+			return models.ManagedServer{}, fmt.Errorf("onesync must be one of on, legacy, infinity, off")
+		}
+		cfg.Gameplay.OneSync = value
+	}
+
+	if patch.ResourcesEnsure != nil {
+		cfg.Resources.Ensure = append([]string{}, *patch.ResourcesEnsure...)
+	}
+
+	if patch.LicenseKey != nil {
+		trimmed := strings.TrimSpace(*patch.LicenseKey)
+		if trimmed == "" {
+			cfg.License.KeyEncrypted = ""
+		} else {
+			encrypted, err := r.encryptLicense(trimmed)
+			if err != nil {
+				return models.ManagedServer{}, err
+			}
+			cfg.License.KeyEncrypted = encrypted
+		}
+	}
+
+	if err := writeServerConfig(filepath.Join(r.rootDir, id, configFilename), &cfg); err != nil {
+		return models.ManagedServer{}, err
+	}
+
+	if err := r.Reload(); err != nil {
+		return models.ManagedServer{}, fmt.Errorf("reload after update: %w", err)
+	}
+
+	r.mu.RLock()
+	e, ok := r.entries[id]
+	r.mu.RUnlock()
+	if !ok {
+		return models.ManagedServer{}, fmt.Errorf("server %s missing from cache after update", id)
+	}
+	return toManagedServer(e), nil
+}
+
+// Delete removes a server from the filesystem and cache. When trash is true
+// the directory is moved under servers/.trash/<id>.<timestamp>/ so operators
+// have a cheap undo path; when false the directory is permanently removed.
+//
+// Callers are expected to have checked with the launcher that no live process
+// still references this directory — deleting an in-use server directory
+// leaves the launcher with a dangling child process.
+func (r *Registry) Delete(id string, trash bool) error {
+	r.mu.RLock()
+	_, ok := r.entries[id]
+	r.mu.RUnlock()
+	if !ok {
+		return fmt.Errorf("server %s not found", id)
+	}
+
+	serverDir := filepath.Join(r.rootDir, id)
+
+	if trash {
+		trashRoot := filepath.Join(r.rootDir, trashDirName)
+		if err := os.MkdirAll(trashRoot, 0o750); err != nil {
+			return fmt.Errorf("create trash dir: %w", err)
+		}
+		target := filepath.Join(trashRoot, fmt.Sprintf("%s.%s", id, time.Now().UTC().Format("20060102T150405Z")))
+		if err := os.Rename(serverDir, target); err != nil {
+			return fmt.Errorf("move server to trash: %w", err)
+		}
+	} else {
+		if err := os.RemoveAll(serverDir); err != nil {
+			return fmt.Errorf("remove server dir: %w", err)
+		}
+	}
+
+	if err := r.Reload(); err != nil {
+		return fmt.Errorf("reload after delete: %w", err)
+	}
+	return nil
 }
 
 // encryptLicense converts a plaintext Cfx.re key to the base64 AES-GCM blob
