@@ -178,8 +178,13 @@
         return {
             background: "#00000000",
             foreground: "rgb(226, 232, 240)",
-            cursor: "rgb(226, 232, 240)",
-            cursorAccent: "#0f172a",
+            // Transparent cursor — the terminal is strictly a viewer here
+            // (disableStdin is true, input goes through the form below),
+            // so the blinking caret xterm draws on focus would just be
+            // visual noise. CSS below belt-and-suspenders hides any
+            // cursor-layer DOM node the renderer adds.
+            cursor: "#00000000",
+            cursorAccent: "#00000000",
             selectionBackground: "rgba(253, 224, 71, 0.35)",
             selectionForeground: undefined,
             selectionInactiveBackground: "rgba(148, 163, 184, 0.25)",
@@ -972,6 +977,19 @@
     }
     .console-host :global(.xterm-viewport::-webkit-scrollbar-thumb:hover) {
         background-color: rgba(148, 163, 184, 0.45);
+    }
+
+    /*
+     * Hide the xterm cursor in every renderer variant (DOM + canvas).
+     * The transparent theme colour above already zeroes it out on the
+     * canvas renderer, but the DOM renderer paints a .xterm-cursor node
+     * whose presence alone reserves layout space and reads as a visible
+     * caret on focus. Nothing gets typed here — stdin is disabled at the
+     * Terminal options level — so the cursor serves no purpose.
+     */
+    .console-host :global(.xterm-cursor),
+    .console-host :global(.xterm-cursor-layer) {
+        display: none !important;
     }
     /*
      * Timestamp gutter decoration.
