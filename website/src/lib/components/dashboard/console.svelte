@@ -618,13 +618,12 @@
         searchAddon = search;
         termGen += 1;
 
-        // Re-render any buffered history into the fresh terminal so hot-
-        // reload and tab switches don't lose the backlog. Replay goes
-        // through replaceBuffer's serial barrier so timestamps line up.
-        if (rawLines.length > 0) {
-            const replay = [...rawLines];
-            replaceBuffer(replay);
-        }
+        // NB: no replay of rawLines here. Reading rawLines inside this
+        // effect creates a reactive dependency, and replaceBuffer mutates
+        // rawLines by design — every push would re-trigger this effect,
+        // tear the terminal down mid-write and recreate it, which is
+        // exactly the hang we used to see on initial load. HMR / tab
+        // switches just show an empty terminal until the next snapshot.
 
         return (): void => {
             // Bump the generation BEFORE disposing so any in-flight write
