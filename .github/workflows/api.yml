@@ -2,12 +2,8 @@ name: API CI
 
 on:
   push:
-    paths:
-      - "api/**"
-      - ".github/workflows/api.yml"
+    branches: [master]
   pull_request:
-    paths:
-      - "api/**"
 
 permissions:
   contents: read
