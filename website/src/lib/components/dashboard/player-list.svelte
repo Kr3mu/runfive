@@ -1,6 +1,7 @@
 <script lang="ts">
     import { createQuery } from "@tanstack/svelte-query";
     import { playersQueryOptions, type Player } from "$lib/api/players";
+    import { serverState } from "$lib/server-state.svelte";
     import Search from "@lucide/svelte/icons/search";
     import ArrowUpDown from "@lucide/svelte/icons/arrow-up-down";
     import ArrowUp from "@lucide/svelte/icons/arrow-up";
@@ -12,9 +13,10 @@
     import RefreshCw from "@lucide/svelte/icons/refresh-cw";
     import LoaderCircle from "@lucide/svelte/icons/loader-circle";
 
-    const players = createQuery(() => playersQueryOptions());
+    const selectedServerId = $derived(serverState.selectedId);
+    const players = createQuery(() => playersQueryOptions(selectedServerId));
 
-    type SortKey = "name" | "connectedSince" | "allTimeConnected" | "ping";
+    type SortKey = "name" | "ping";
     type SortDir = "asc" | "desc";
 
     let searchQuery = $state("");
@@ -24,17 +26,8 @@
         null,
     );
 
-    function parseTime(t: string): number {
-        let total = 0;
-        const hMatch = t.match(/(\d+)h/);
-        const mMatch = t.match(/(\d+)m/);
-        if (hMatch) total += parseInt(hMatch[1]) * 60;
-        if (mMatch) total += parseInt(mMatch[1]);
-        return total;
-    }
-
     const filteredPlayers = $derived(() => {
-        const data = players.data ?? [];
+        const data: Player[] = players.data ?? [];
         let result = [...data];
 
         if (searchQuery) {
@@ -51,12 +44,6 @@
             let cmp = 0;
             if (sortKey === "name") cmp = a.name.localeCompare(b.name);
             else if (sortKey === "ping") cmp = a.ping - b.ping;
-            else if (sortKey === "connectedSince")
-                cmp = parseTime(a.connectedSince) - parseTime(b.connectedSince);
-            else if (sortKey === "allTimeConnected")
-                cmp =
-                    parseTime(a.allTimeConnected) -
-                    parseTime(b.allTimeConnected);
             return sortDir === "asc" ? cmp : -cmp;
         });
 
@@ -201,24 +188,6 @@
                                 {@render sortIcon("ping")}
                             </button>
                         </th>
-                        <th class="px-3 py-2">
-                            <button
-                                onclick={() => toggleSort("connectedSince")}
-                                class="flex items-center gap-1 text-[11px] font-semibold tracking-wider text-muted-foreground/60 uppercase transition-colors hover:text-foreground"
-                            >
-                                Session
-                                {@render sortIcon("connectedSince")}
-                            </button>
-                        </th>
-                        <th class="hidden px-3 py-2 lg:table-cell">
-                            <button
-                                onclick={() => toggleSort("allTimeConnected")}
-                                class="flex items-center gap-1 text-[11px] font-semibold tracking-wider text-muted-foreground/60 uppercase transition-colors hover:text-foreground"
-                            >
-                                Total
-                                {@render sortIcon("allTimeConnected")}
-                            </button>
-                        </th>
                         <th class="px-3 py-2 text-right">
                             <span
                                 class="text-[11px] font-semibold tracking-wider text-muted-foreground/60 uppercase"
@@ -238,7 +207,7 @@
                                 <span
                                     class="inline-flex h-6 min-w-6 items-center justify-center rounded bg-primary/8 px-1.5 font-mono text-[11px] font-bold text-primary/70"
                                 >
-                                    {player.source}
+                                    {player.id}
                                 </span>
                             </td>
                             <td class="py-1.5 pl-2 pr-3">
@@ -249,15 +218,25 @@
                             </td>
                             <td class="px-3 py-1.5">
                                 <span class="text-xs text-muted-foreground/70"
-                                    >{player.discord}</span
+                                    >{player.discord || "—"}</span
                                 >
                             </td>
                             <td class="hidden px-3 py-1.5 xl:table-cell">
-                                <code
-                                    class="rounded bg-muted/50 px-1.5 py-px font-mono text-[11px] text-muted-foreground/50"
-                                >
-                                    {player.license.slice(0, 22)}...
-                                </code>
+                                {#if player.license}
+                                    <code
+                                        class="rounded bg-muted/50 px-1.5 py-px font-mono text-[11px] text-muted-foreground/50"
+                                    >
+                                        {player.license.slice(0, 22)}{player
+                                            .license.length > 22
+                                            ? "…"
+                                            : ""}
+                                    </code>
+                                {:else}
+                                    <span
+                                        class="text-xs text-muted-foreground/30"
+                                        >—</span
+                                    >
+                                {/if}
                             </td>
                             <td class="px-3 py-1.5">
                                 <span
@@ -267,18 +246,6 @@
                                     >{player.ping}<span
                                         class="text-[10px] opacity-50">ms</span
                                     ></span
-                                >
-                            </td>
-                            <td class="px-3 py-1.5">
-                                <span
-                                    class="font-mono text-xs text-muted-foreground/60"
-                                    >{player.connectedSince}</span
-                                >
-                            </td>
-                            <td class="hidden px-3 py-1.5 lg:table-cell">
-                                <span
-                                    class="font-mono text-xs text-muted-foreground/50"
-                                    >{player.allTimeConnected}</span
                                 >
                             </td>
                             <td class="px-3 py-1.5">
@@ -335,7 +302,7 @@
                     {#if filteredPlayers().length === 0}
                         <tr>
                             <td
-                                colspan="8"
+                                colspan="6"
                                 class="py-8 text-center text-xs text-muted-foreground/30"
                             >
                                 No players found

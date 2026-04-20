@@ -12,6 +12,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/runfivedev/runfive/internal/auth"
+	"github.com/runfivedev/runfive/internal/fxserver"
 	"github.com/runfivedev/runfive/internal/launcher"
 	"github.com/runfivedev/runfive/internal/models"
 	"github.com/runfivedev/runfive/internal/permissions"
@@ -52,16 +53,25 @@ type serverLauncher interface {
 	IsRunning(string) bool
 }
 
+// serverRuntimeClient talks to a running fxserver's HTTP endpoint. The
+// interface keeps the handler test-friendly — production wiring passes a
+// *fxserver.RuntimeClient, tests can substitute a fake without spinning up
+// a real listener.
+type serverRuntimeClient interface {
+	FetchPlayers(ctx context.Context, port int) ([]fxserver.Player, error)
+}
+
 // ServerHandler serves filesystem-backed managed server endpoints.
 type ServerHandler struct {
 	registry  serverRegistry
 	artifacts serverArtifactManager
 	launcher  serverLauncher
+	fxRuntime serverRuntimeClient
 }
 
 // NewServerHandler creates a server handler with its dependencies.
-func NewServerHandler(registry serverRegistry, artifacts serverArtifactManager, serverLauncher serverLauncher) *ServerHandler {
-	return &ServerHandler{registry: registry, artifacts: artifacts, launcher: serverLauncher}
+func NewServerHandler(registry serverRegistry, artifacts serverArtifactManager, serverLauncher serverLauncher, fxRuntime serverRuntimeClient) *ServerHandler {
+	return &ServerHandler{registry: registry, artifacts: artifacts, launcher: serverLauncher, fxRuntime: fxRuntime}
 }
 
 // List returns filesystem-discovered servers, filtered by RBAC visibility.
@@ -262,6 +272,40 @@ func (h *ServerHandler) Logs(c fiber.Ctx) error {
 		return launcherHTTPError(err)
 	}
 	return c.JSON(models.ServerLogsResponse{Lines: lines})
+}
+
+// Players returns the live player list sourced from fxserver's players.json
+// loopback endpoint.
+//
+// GET /v1/servers/:serverId/players
+//
+// Returns an empty array (200) when the server is not running, when the
+// registered port is zero (no listener), or when the HTTP call to fxserver
+// fails or times out. The UI polls this every 5 s and flipping between 200
+// and 5xx during boot windows would produce error toasts for transient
+// states — a calm zero-player view is the better default. A genuine server
+// lookup failure still returns 404 so RBAC filtering stays distinguishable
+// from runtime unavailability.
+func (h *ServerHandler) Players(c fiber.Ctx) error {
+	serverID := c.Params("serverId")
+	server, ok := h.registry.Get(serverID)
+	if !ok {
+		return fiber.NewError(fiber.StatusNotFound, "server not found")
+	}
+
+	status, err := h.launcher.Status(serverID)
+	if err != nil || status.Status != models.ServerStatusRunning {
+		return c.JSON([]fxserver.Player{})
+	}
+	if server.Port <= 0 {
+		return c.JSON([]fxserver.Player{})
+	}
+
+	players, err := h.fxRuntime.FetchPlayers(c.Context(), server.Port)
+	if err != nil {
+		return c.JSON([]fxserver.Player{})
+	}
+	return c.JSON(players)
 }
 
 // StreamLogs upgrades to a websocket that streams console lines and accepts
