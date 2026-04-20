@@ -8,13 +8,14 @@ import (
 
 	"github.com/runfivedev/runfive/internal/artifacts"
 	"github.com/runfivedev/runfive/internal/auth"
+	"github.com/runfivedev/runfive/internal/fxserver"
 	"github.com/runfivedev/runfive/internal/launcher"
 	"github.com/runfivedev/runfive/internal/permissions"
 	"github.com/runfivedev/runfive/internal/serverfs"
 )
 
 // RegisterRouter mounts all v1 API routes on the provided router group.
-func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *auth.CfxAuth, fe *auth.FieldEncryptor, discord *auth.DiscordAuth, st *auth.SetupTokenStore, baseURL string, artifactManager *artifacts.Manager, serverRegistry *serverfs.Registry, launcherManager *launcher.Manager) {
+func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *auth.CfxAuth, fe *auth.FieldEncryptor, discord *auth.DiscordAuth, st *auth.SetupTokenStore, baseURL string, artifactManager *artifacts.Manager, serverRegistry *serverfs.Registry, launcherManager *launcher.Manager, fxRuntime *fxserver.RuntimeClient) {
 	authHandler := NewAuthHandler(db, sm, cfx, fe, discord, st)
 	authGroup := r.Group("/auth")
 
@@ -81,7 +82,7 @@ func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *a
 	roleGroup.Delete("/:id", auth.RequireGlobalPerm(permissions.GlobalRoles, permissions.ActionDelete), roleHandler.Delete)
 
 	// Server management endpoints (permission-based)
-	serverHandler := NewServerHandler(serverRegistry, artifactManager, launcherManager)
+	serverHandler := NewServerHandler(serverRegistry, artifactManager, launcherManager, fxRuntime)
 	serverGroup := r.Group("/servers", auth.RequireAuth(sm, db), auth.LoadPermissions(db))
 	serverGroup.Get("", serverHandler.List)
 	serverGroup.Post("", auth.RequireGlobalPerm(permissions.GlobalServers, permissions.ActionCreate), serverHandler.Create)
@@ -102,6 +103,7 @@ func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *a
 	serverGroup.Post("/:serverId/stop", auth.RequireServerPerm(permissions.ServerConsole, permissions.ActionExecute), serverHandler.Stop)
 	serverGroup.Get("/:serverId/status", auth.RequireServerPerm(permissions.ServerConsole, permissions.ActionRead), serverHandler.Status)
 	serverGroup.Get("/:serverId/logs", auth.RequireServerPerm(permissions.ServerConsole, permissions.ActionRead), serverHandler.Logs)
+	serverGroup.Get("/:serverId/players", auth.RequireServerPerm(permissions.ServerConsole, permissions.ActionRead), serverHandler.Players)
 	serverGroup.Get(
 		"/:serverId/logs/ws",
 		auth.RequireServerPerm(permissions.ServerConsole, permissions.ActionRead),

@@ -10,6 +10,7 @@ import (
 	v1 "github.com/runfivedev/runfive/internal/api/v1"
 	"github.com/runfivedev/runfive/internal/artifacts"
 	"github.com/runfivedev/runfive/internal/auth"
+	"github.com/runfivedev/runfive/internal/fxserver"
 	"github.com/runfivedev/runfive/internal/launcher"
 	"github.com/runfivedev/runfive/internal/serverfs"
 	"github.com/runfivedev/runfive/internal/spa"
@@ -37,6 +38,8 @@ type AppDeps struct {
 	ST *auth.SetupTokenStore
 	// BaseURL is the public base URL for constructing invite links.
 	BaseURL string
+	// FxRuntime queries live fxserver HTTP endpoints (players.json, etc).
+	FxRuntime *fxserver.RuntimeClient
 }
 
 // New creates the Fiber application with all middleware and routes.
@@ -66,5 +69,5 @@ func New(appConfig *fiber.Config, deps *AppDeps) *fiber.App {
 
 func setupRoutes(app *fiber.App, deps *AppDeps) {
 	v1Group := app.Group("/v1")
-	v1.RegisterRouter(v1Group, deps.DB, deps.SM, deps.Cfx, deps.FE, deps.Discord, deps.ST, deps.BaseURL, deps.ArtifactManager, deps.ServerRegistry, deps.Launcher)
+	v1.RegisterRouter(v1Group, deps.DB, deps.SM, deps.Cfx, deps.FE, deps.Discord, deps.ST, deps.BaseURL, deps.ArtifactManager, deps.ServerRegistry, deps.Launcher, deps.FxRuntime)
 }

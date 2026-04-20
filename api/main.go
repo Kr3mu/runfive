@@ -21,6 +21,7 @@ import (
 	"github.com/runfivedev/runfive/internal/config"
 	"github.com/runfivedev/runfive/internal/console"
 	"github.com/runfivedev/runfive/internal/database"
+	"github.com/runfivedev/runfive/internal/fxserver"
 	"github.com/runfivedev/runfive/internal/launcher"
 	"github.com/runfivedev/runfive/internal/models"
 	"github.com/runfivedev/runfive/internal/runtimepath"
@@ -143,6 +144,7 @@ func main() {
 		Discord:         discord,
 		ST:              setupTokenStore,
 		BaseURL:         cfg.BaseURL,
+		FxRuntime:       fxserver.NewRuntimeClient(),
 	})
 
 	if setupURL != "" {
