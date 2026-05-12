@@ -7,6 +7,7 @@
     import Users from "@lucide/svelte/icons/users";
     import Terminal from "@lucide/svelte/icons/terminal";
     import ShieldBan from "@lucide/svelte/icons/shield-ban";
+    import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
     import Settings from "@lucide/svelte/icons/settings";
     import PanelLeftClose from "@lucide/svelte/icons/panel-left-close";
     import PanelLeftOpen from "@lucide/svelte/icons/panel-left-open";
@@ -87,6 +88,7 @@
         { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", resource: "dashboard" },
         { icon: Users, label: "Players", href: "/dashboard/players", resource: "players" },
         { icon: Terminal, label: "Console", href: "/dashboard/console", resource: "console" },
+        { icon: SlidersHorizontal, label: "Configuration", href: "/dashboard/configuration", resource: "settings" },
         { icon: ShieldBan, label: "Bans", href: "/dashboard/bans", resource: "bans" },
     ];
 
