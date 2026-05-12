@@ -125,7 +125,7 @@ func readCustomCfg(serverDir string) (CustomCfg, error) {
 // to have validated permissions; this layer enforces size and content-safety
 // only. Atomic via temp-file + rename so a concurrent reader never sees a
 // partial write.
-func writeCustomCfg(serverDir string, content string) (CustomCfg, error) {
+func writeCustomCfg(serverDir, content string) (CustomCfg, error) {
 	if len(content) > CustomCfgMaxBytes {
 		return CustomCfg{}, ErrCustomCfgTooLarge
 	}

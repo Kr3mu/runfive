@@ -11,7 +11,7 @@ func TestReload_SeedsEmptyCustomCfg(t *testing.T) {
 	reg := newTestRegistry(t, baseConfig("Alpha", 30120))
 
 	path := filepath.Join(reg.rootDir, "Alpha", configurationsDir, customCfgFile)
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path is rooted at t.TempDir() and built from internal constants.
 	if err != nil {
 		t.Fatalf("expected custom.cfg to be seeded on first reload, got err: %v", err)
 	}
@@ -33,7 +33,7 @@ func TestReload_DoesNotOverwriteExistingCustomCfg(t *testing.T) {
 		t.Fatalf("Reload: %v", err)
 	}
 
-	got, err := os.ReadFile(path)
+	got, err := os.ReadFile(path) //nolint:gosec // path is rooted at t.TempDir() and built from internal constants.
 	if err != nil {
 		t.Fatalf("read back: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestCustomCfg_NotWatchedByReload(t *testing.T) {
 		if err := reg.Reload(); err != nil {
 			t.Fatalf("reload %d: %v", i, err)
 		}
-		got, err := os.ReadFile(path)
+		got, err := os.ReadFile(path) //nolint:gosec // path is rooted at t.TempDir() and built from internal constants.
 		if err != nil {
 			t.Fatalf("read %d: %v", i, err)
 		}
