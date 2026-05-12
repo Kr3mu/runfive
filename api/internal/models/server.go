@@ -104,6 +104,30 @@ type UpdateServerRequest struct {
 	ResourcesEnsure *[]string `json:"resourcesEnsure,omitempty"`
 }
 
+// ServerCustomCfg is the snapshot returned by GET /v1/servers/:serverId/custom-cfg.
+// It mirrors the on-disk state of the operator-owned configurations/custom.cfg
+// file, which the panel seeds once with a header but otherwise never touches.
+type ServerCustomCfg struct {
+	// Content is the raw file body, exactly as it lives on disk.
+	Content string `json:"content"`
+	// SizeBytes is len(Content) at the time of the read.
+	SizeBytes int `json:"sizeBytes"`
+	// MaxBytes is the size cap enforced on PUT. Surfaced so the UI can
+	// render a meaningful "X / Y bytes" counter without a magic number.
+	MaxBytes int `json:"maxBytes"`
+	// UpdatedAt is the last modification time of the file, RFC3339-encoded.
+	// Zero when the file did not exist at read time.
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// UpdateServerCustomCfgRequest is the body for PUT /v1/servers/:serverId/custom-cfg.
+type UpdateServerCustomCfgRequest struct {
+	// Content is the new file body. The server writes it verbatim after
+	// size and content-safety checks; no sanitisation is performed because
+	// fxserver cfg syntax intentionally allows arbitrary directives.
+	Content string `json:"content"`
+}
+
 // InstalledArtifact represents an extracted artifact on disk.
 type InstalledArtifact struct {
 	OS      string `json:"os"`

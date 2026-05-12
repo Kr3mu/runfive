@@ -99,6 +99,22 @@ func RegisterRouter(r fiber.Router, db *gorm.DB, sm *auth.SessionManager, cfx *a
 		auth.RequireGlobalPerm(permissions.GlobalServers, permissions.ActionDelete),
 		serverHandler.Delete,
 	)
+	serverGroup.Get(
+		"/:serverId/custom-cfg",
+		auth.RequireServerOrGlobalPerm(
+			permissions.ServerSettings, permissions.ActionRead,
+			permissions.GlobalServers, permissions.ActionUpdate,
+		),
+		serverHandler.ReadCustomCfg,
+	)
+	serverGroup.Put(
+		"/:serverId/custom-cfg",
+		auth.RequireServerOrGlobalPerm(
+			permissions.ServerSettings, permissions.ActionUpdate,
+			permissions.GlobalServers, permissions.ActionUpdate,
+		),
+		serverHandler.UpdateCustomCfg,
+	)
 	serverGroup.Post("/:serverId/start", auth.RequireServerPerm(permissions.ServerConsole, permissions.ActionExecute), serverHandler.Start)
 	serverGroup.Post("/:serverId/stop", auth.RequireServerPerm(permissions.ServerConsole, permissions.ActionExecute), serverHandler.Stop)
 	serverGroup.Get("/:serverId/status", auth.RequireServerPerm(permissions.ServerConsole, permissions.ActionRead), serverHandler.Status)
