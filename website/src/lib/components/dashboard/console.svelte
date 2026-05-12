@@ -47,6 +47,15 @@
 
     let runtimeStatus = $state<ServerProcessStatus | null>(null);
     let logs = $state<ServerLogLine[]>([]);
+    /**
+     * Watermark for the clear-console action. After clearing the buffer we
+     * remember the highest backend-issued log id we'd already shown, so a
+     * subsequent reconnect snapshot (or any other replay) doesn't re-flood
+     * the cleared view with lines the operator just dismissed. Local
+     * system lines use negative ids and are never floored — they always
+     * render so error toasts and connection notes survive a clear.
+     */
+    let floorLogId = $state(0);
     let loading = $state(false);
     let socketState = $state<SocketState>("idle");
     let actionState = $state<ActionState>(null);
@@ -146,13 +155,24 @@
         };
     }
 
+    /**
+     * Gate for both single-line pushes and bulk merges. Backend ids
+     * monotonically increase, so anything ≤ floor was already on screen
+     * before the operator cleared the console. Local system lines
+     * (negative ids from nextLocalLogID) bypass the gate.
+     */
+    function passesFloor(line: ServerLogLine): boolean {
+        return line.id <= 0 || line.id > floorLogId;
+    }
+
     function pushLine(line: ServerLogLine): void {
+        if (!passesFloor(line)) return;
         logs = [...logs.slice(-2999), line];
         requestAnimationFrame(scrollToBottom);
     }
 
     function mergeLines(lines: ServerLogLine[]): void {
-        logs = lines.slice(-3000);
+        logs = lines.filter(passesFloor).slice(-3000);
         requestAnimationFrame(scrollToBottom);
     }
 
@@ -185,6 +205,17 @@
     }
 
     function clearConsole(): void {
+        // Lift the floor to the highest backend id we've already rendered.
+        // A reconnect snapshot will hand us those same lines back (the
+        // backend tail buffer isn't aware of this client's clear), and
+        // without the floor they'd all reappear — which is what the
+        // "trash" button is supposed to defeat. Local system lines have
+        // negative ids and don't contribute to the floor.
+        let maxId = floorLogId;
+        for (const line of logs) {
+            if (line.id > maxId) maxId = line.id;
+        }
+        floorLogId = maxId;
         logs = [];
     }
 
@@ -324,6 +355,7 @@
             socketRef = null;
             runtimeStatus = null;
             logs = [];
+            floorLogId = 0;
             loading = false;
             socketState = "idle";
             return;
@@ -333,6 +365,7 @@
         let reconnectTimer: number | null = null;
 
         logs = [];
+        floorLogId = 0;
         runtimeStatus = null;
         loading = true;
 
@@ -491,17 +524,32 @@
             </div>
         </div>
 
+        <!--
+            The scroll container is explicitly `select-text` / `cursor-text`
+            so the surrounding chrome (grid-stack item, focusable wrapper)
+            can't silently inherit the wrong user-select state. The line
+            below pulls the gutter (index / timestamp / level) out of the
+            text-flow via absolute positioning so a drag-selection across
+            multiple rows picks up only the message bodies — interleaving
+            `user-select: none` spans with selectable text breaks the copy
+            output on every browser we tested.
+        -->
         <div
             bind:this={consoleEl}
             onscroll={handleScroll}
-            class="console-scroll flex-1 overflow-y-auto overflow-x-hidden font-mono text-xs leading-[1.7]"
+            class="console-scroll flex-1 cursor-text overflow-y-auto overflow-x-hidden font-mono text-xs leading-[1.7] select-text"
         >
             {#each filteredLogs as line, i (line.id)}
                 {@const level = lineLevel(line)}
-                <div class="flex items-baseline border-b border-border/10 px-3 py-0.75 transition-colors hover:bg-muted/20">
-                    <span class="w-6 shrink-0 select-none text-right text-[11px] text-muted-foreground/25">{i + 1}</span>
-                    <span class="mx-2 shrink-0 select-none text-[11px] text-muted-foreground/35">{lineTimestamp(line)}</span>
-                    <span class="mr-2 w-7 shrink-0 select-none text-right text-[11px] font-semibold {levelTag[level].class}">{levelTag[level].text}</span>
+                <div class="relative border-b border-border/10 py-0.75 pr-3 pl-[7.5rem] transition-colors hover:bg-muted/20">
+                    <span
+                        aria-hidden="true"
+                        class="pointer-events-none absolute top-[3px] left-3 flex items-baseline gap-2 text-[11px] leading-[1.7] select-none"
+                    >
+                        <span class="w-6 text-right text-muted-foreground/25 tabular-nums">{i + 1}</span>
+                        <span class="text-muted-foreground/35 tabular-nums">{lineTimestamp(line)}</span>
+                        <span class="w-7 text-right font-semibold {levelTag[level].class}">{levelTag[level].text}</span>
+                    </span>
                     <span class="{levelColors[level]} break-all">{line.message}</span>
                 </div>
             {/each}
