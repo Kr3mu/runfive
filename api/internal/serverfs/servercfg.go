@@ -71,6 +71,13 @@ func renderServerCfg(cfg *ServerConfig, licenseKey string) (rendered string, war
 		fmt.Fprintf(&b, "sv_licenseKey %q\n", sanitizeQuoted(licenseKey))
 	}
 
+	// User-owned overrides run after the panel-managed directives so an
+	// operator can override convars or add ACEs/principals, and BEFORE the
+	// ensure block so resources see the final convar set at start time.
+	// The path is forward-slash on every platform — fxserver normalises it.
+	b.WriteString("\n")
+	b.WriteString("exec \"configurations/custom.cfg\"\n")
+
 	if len(cfg.Resources.Ensure) > 0 {
 		b.WriteString("\n")
 		for _, raw := range cfg.Resources.Ensure {

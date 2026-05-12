@@ -37,6 +37,8 @@ type serverRegistry interface {
 	Update(string, *serverfs.UpdatePatch) (models.ManagedServer, error)
 	Delete(string, bool) error
 	Reload() error
+	ReadCustomCfg(string) (serverfs.CustomCfg, error)
+	WriteCustomCfg(string, string) (serverfs.CustomCfg, error)
 }
 
 type serverArtifactManager interface {
@@ -427,6 +429,73 @@ func (h *ServerHandler) StreamLogs(conn *ws.Conn) {
 			_ = writeJSON(models.ServerConsoleEvent{Type: "error", Error: err.Error()})
 		}
 	}
+}
+
+// ReadCustomCfg returns the operator-owned custom.cfg snapshot for one server.
+//
+// GET /v1/servers/:serverId/custom-cfg
+//
+// A missing file maps to an empty body — the registry seeds the file with a
+// header on first reload, so the typical first read returns that header.
+func (h *ServerHandler) ReadCustomCfg(c fiber.Ctx) error {
+	serverID := c.Params("serverId")
+	if serverID == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "missing server ID")
+	}
+	if _, ok := h.registry.Get(serverID); !ok {
+		return fiber.NewError(fiber.StatusNotFound, "server not found")
+	}
+
+	snap, err := h.registry.ReadCustomCfg(serverID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+
+	return c.JSON(models.ServerCustomCfg{
+		Content:   snap.Content,
+		SizeBytes: snap.SizeBytes,
+		MaxBytes:  serverfs.CustomCfgMaxBytes,
+		UpdatedAt: snap.UpdatedAt,
+	})
+}
+
+// UpdateCustomCfg writes the supplied body to the operator-owned custom.cfg
+// for one server. The file is consumed by the generated server.cfg via an
+// `exec` directive on the next launch, so changes take effect on restart.
+//
+// PUT /v1/servers/:serverId/custom-cfg
+func (h *ServerHandler) UpdateCustomCfg(c fiber.Ctx) error {
+	serverID := c.Params("serverId")
+	if serverID == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "missing server ID")
+	}
+	if _, ok := h.registry.Get(serverID); !ok {
+		return fiber.NewError(fiber.StatusNotFound, "server not found")
+	}
+
+	var req models.UpdateServerCustomCfgRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+
+	snap, err := h.registry.WriteCustomCfg(serverID, req.Content)
+	if err != nil {
+		switch {
+		case errors.Is(err, serverfs.ErrCustomCfgTooLarge):
+			return fiber.NewError(fiber.StatusRequestEntityTooLarge, err.Error())
+		case errors.Is(err, serverfs.ErrCustomCfgNullByte):
+			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		default:
+			return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		}
+	}
+
+	return c.JSON(models.ServerCustomCfg{
+		Content:   snap.Content,
+		SizeBytes: snap.SizeBytes,
+		MaxBytes:  serverfs.CustomCfgMaxBytes,
+		UpdatedAt: snap.UpdatedAt,
+	})
 }
 
 func launcherHTTPError(err error) error {

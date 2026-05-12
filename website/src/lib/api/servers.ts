@@ -223,6 +223,77 @@ export async function fetchServerLogs(serverId: string, n = 200): Promise<Server
     return ((await res.json()) as ServerLogsResponse).lines;
 }
 
+/**
+ * Snapshot of the operator-owned `configurations/custom.cfg` file for one
+ * server. Returned by both GET and PUT — `updatedAt` is the on-disk mtime
+ * after the operation, suitable for "last saved X ago" UI.
+ */
+export interface ServerCustomCfg {
+    /** Raw file body, exactly as it lives on disk. */
+    content: string;
+    /** `len(content)` at the time of the response. */
+    sizeBytes: number;
+    /** Server-side cap on PUT payloads. Surfaced so the UI can render a meaningful counter. */
+    maxBytes: number;
+    /** RFC3339 mtime of custom.cfg, or the zero time if the file did not exist. */
+    updatedAt: string;
+}
+
+/**
+ * Fetch the current `custom.cfg` for a server.
+ *
+ * Returns an empty body when the file does not exist yet — the backend
+ * seeds it with a header on the next registry reload, so the first
+ * legitimate read after a server is created typically returns that header.
+ *
+ * @param serverId - Directory ID of the target server.
+ */
+export async function fetchCustomCfg(serverId: string): Promise<ServerCustomCfg> {
+    const res: Response = await fetch(
+        `/v1/servers/${encodeURIComponent(serverId)}/custom-cfg`,
+    );
+    if (!res.ok) {
+        const payload: { error?: string } = (await res.json()) as { error?: string };
+        throw new Error(
+            payload.error ?? `GET /v1/servers/${serverId}/custom-cfg failed: ${res.status}`,
+        );
+    }
+    return (await res.json()) as ServerCustomCfg;
+}
+
+/**
+ * Replace the on-disk `custom.cfg` for a server.
+ *
+ * Changes take effect on the next launch of the server because the
+ * generated `server.cfg` reads `custom.cfg` via an `exec` directive at
+ * startup. The backend enforces a size cap (max ~256 KiB) and rejects
+ * NUL bytes; everything else is written verbatim.
+ *
+ * @param serverId - Directory ID of the target server.
+ * @param content  - New file body. Send the empty string to clear the file.
+ * @returns Snapshot of the file as it now lives on disk.
+ */
+export async function updateCustomCfg(
+    serverId: string,
+    content: string,
+): Promise<ServerCustomCfg> {
+    const res: Response = await fetch(
+        `/v1/servers/${encodeURIComponent(serverId)}/custom-cfg`,
+        {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ content }),
+        },
+    );
+    if (!res.ok) {
+        const payload: { error?: string } = (await res.json()) as { error?: string };
+        throw new Error(
+            payload.error ?? `PUT /v1/servers/${serverId}/custom-cfg failed: ${res.status}`,
+        );
+    }
+    return (await res.json()) as ServerCustomCfg;
+}
+
 export function serverLogsWebSocketURL(serverId: string): string {
     const url = new URL(`/v1/servers/${encodeURIComponent(serverId)}/logs/ws`, window.location.origin);
     url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";

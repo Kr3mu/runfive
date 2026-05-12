@@ -47,6 +47,14 @@ func (f *fakeRegistry) Update(string, *serverfs.UpdatePatch) (models.ManagedServ
 func (f *fakeRegistry) Delete(string, bool) error { return errors.New("not implemented") }
 func (f *fakeRegistry) Reload() error             { return nil }
 
+func (f *fakeRegistry) ReadCustomCfg(string) (serverfs.CustomCfg, error) {
+	return serverfs.CustomCfg{}, errors.New("not implemented")
+}
+
+func (f *fakeRegistry) WriteCustomCfg(string, string) (serverfs.CustomCfg, error) {
+	return serverfs.CustomCfg{}, errors.New("not implemented")
+}
+
 type fakeArtifacts struct{}
 
 func (fakeArtifacts) Install(context.Context, string) (models.InstalledArtifact, error) {

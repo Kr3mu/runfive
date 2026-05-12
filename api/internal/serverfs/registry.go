@@ -201,6 +201,15 @@ func (r *Registry) Reload() error {
 			log.Printf("[serverfs] %s: %s", id, w)
 			r.emitWarning(id, w)
 		}
+
+		// custom.cfg is operator-owned: we seed an empty file with a header
+		// the very first time we see a server, and never touch it again.
+		// Errors here are logged but not fatal — the generated server.cfg
+		// still references the path via `exec`, and fxserver will simply
+		// surface a missing-file warning on launch if seeding failed.
+		if err := ensureCustomCfgExists(serverDir); err != nil {
+			log.Printf("[serverfs] %s: ensure custom.cfg: %v", id, err)
+		}
 	}
 
 	return nil
@@ -663,6 +672,35 @@ func (r *Registry) encryptLicense(plain string) (string, error) {
 		return "", fmt.Errorf("encrypt license key: %w", err)
 	}
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
+}
+
+// ReadCustomCfg returns the current contents of the per-server custom.cfg.
+// A missing file is reported as an empty snapshot rather than an error so
+// the UI can render a usable editor on first visit. The id must reference a
+// valid (non-invalid) entry.
+func (r *Registry) ReadCustomCfg(id string) (CustomCfg, error) {
+	r.mu.RLock()
+	e, ok := r.entries[id]
+	r.mu.RUnlock()
+	if !ok || e.invalid {
+		return CustomCfg{}, fmt.Errorf("server %s not found", id)
+	}
+	return readCustomCfg(filepath.Join(r.rootDir, id))
+}
+
+// WriteCustomCfg replaces the contents of the per-server custom.cfg
+// atomically. Size and content-safety are enforced inside writeCustomCfg;
+// callers are responsible for the permission check. The id must reference a
+// valid (non-invalid) entry. No registry reload is triggered — custom.cfg
+// is operator-owned and lives outside the TOML-derived cache.
+func (r *Registry) WriteCustomCfg(id, content string) (CustomCfg, error) {
+	r.mu.RLock()
+	e, ok := r.entries[id]
+	r.mu.RUnlock()
+	if !ok || e.invalid {
+		return CustomCfg{}, fmt.Errorf("server %s not found", id)
+	}
+	return writeCustomCfg(filepath.Join(r.rootDir, id), content)
 }
 
 // ArtifactReferences returns server IDs pointing at the given artifact version.
