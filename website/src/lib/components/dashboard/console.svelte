@@ -68,6 +68,17 @@
      * match the terminal scrollback so memory stays bounded.
      */
     let rawLines = $state<ServerLogLine[]>([]);
+    /**
+     * Watermark for the clear-console action. After clearing, this holds the
+     * highest backend log id we'd already shown — every subsequent push or
+     * snapshot drops lines with id ≤ floor before they reach xterm. Without
+     * this, a websocket reconnect or any other replay would hand the backend
+     * tail buffer's last 200 lines straight back into a "cleared" terminal.
+     * Local system lines use negative ids (nextLocalLogID) and bypass the
+     * gate so error toasts / connection notes survive a clear. Reset to zero
+     * on every server switch so a fresh server starts unfiltered.
+     */
+    let floorLogId = 0;
 
     /** Bound to the host <div> that xterm mounts into. */
     let termHostEl = $state<HTMLDivElement | null>(null);
@@ -305,6 +316,17 @@
         });
     }
 
+    /**
+     * Gate for both single-line pushes and bulk replays. Backend ids
+     * monotonically increase, so anything ≤ floor was already on screen
+     * before the operator cleared the console. Local system lines use
+     * negative ids and bypass the gate so error / connection notes still
+     * render after a clear.
+     */
+    function passesFloor(line: ServerLogLine): boolean {
+        return line.id <= 0 || line.id > floorLogId;
+    }
+
     function replaceBuffer(lines: ServerLogLine[]): void {
         if (!term) return;
         const t = term;
@@ -313,7 +335,10 @@
 
         t.clear();
         rawLines = [];
-        const trimmed = lines.slice(-SCROLLBACK_LINES);
+        // Filter against the clear-watermark BEFORE trimming so a snapshot
+        // that ends entirely below the floor produces an empty buffer
+        // instead of silently re-flooding from the SCROLLBACK_LINES tail.
+        const trimmed = lines.filter(passesFloor).slice(-SCROLLBACK_LINES);
         for (const line of trimmed) {
             rawLines.push(line);
         }
@@ -383,12 +408,23 @@
     }
 
     function pushLine(line: ServerLogLine): void {
+        if (!passesFloor(line)) return;
         rawLines = [...rawLines.slice(-(SCROLLBACK_LINES - 1)), line];
         writeLine(line);
     }
 
     function clearConsole(): void {
         if (!term) return;
+        // Lift the floor to the highest backend id we've already rendered.
+        // A reconnect snapshot will hand us those same lines back (the
+        // backend tail buffer isn't aware of this client's clear), and
+        // without the floor they'd all reappear — defeating the trash-can.
+        // Local system lines have negative ids and don't contribute.
+        let maxId = floorLogId;
+        for (const line of rawLines) {
+            if (line.id > maxId) maxId = line.id;
+        }
+        floorLogId = maxId;
         term.clear();
         rawLines = [];
     }
@@ -659,6 +695,7 @@
             socketRef?.close(1000, "switch");
             socketRef = null;
             runtimeStatus = null;
+            floorLogId = 0;
             replaceBuffer([]);
             loading = false;
             socketState = "idle";
@@ -668,6 +705,7 @@
         let disposed = false;
         let reconnectTimer: number | null = null;
 
+        floorLogId = 0;
         replaceBuffer([]);
         runtimeStatus = null;
         loading = true;
