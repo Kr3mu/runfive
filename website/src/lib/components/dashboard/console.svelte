@@ -580,7 +580,61 @@
         if (term) safeScrollToBottom(term);
     }
 
+    /**
+     * Copy a string to the system clipboard with a graceful fallback for
+     * non-secure contexts (HTTP dev servers / older browsers) where
+     * navigator.clipboard is unavailable. The fallback briefly mounts a
+     * hidden textarea so document.execCommand("copy") has something to
+     * read from — there's no other way to bypass the security gate on
+     * the modern API.
+     */
+    async function copyToClipboard(text: string): Promise<boolean> {
+        if (!text) return false;
+        if (navigator.clipboard && window.isSecureContext) {
+            try {
+                await navigator.clipboard.writeText(text);
+                return true;
+            } catch {
+                // Permission denied / focus lost — fall through to legacy.
+            }
+        }
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.top = "0";
+        ta.style.left = "0";
+        ta.style.opacity = "0";
+        ta.style.pointerEvents = "none";
+        document.body.appendChild(ta);
+        ta.select();
+        let ok = false;
+        try {
+            ok = document.execCommand("copy");
+        } catch {
+            ok = false;
+        }
+        ta.remove();
+        return ok;
+    }
+
     function handleKeydown(e: KeyboardEvent): void {
+        // Ctrl+C / Cmd+C: xterm's selection lives in the canvas cell grid,
+        // not the DOM, so the browser's default "copy selected text" is a
+        // no-op here. Read the selection out of the terminal API and write
+        // it to the clipboard ourselves. We skip when focus is in our own
+        // form fields (command field / search box) so the user's typed
+        // text — not a stale terminal selection — gets copied there.
+        if ((e.ctrlKey || e.metaKey) && (e.key === "c" || e.key === "C") && !e.shiftKey && !e.altKey) {
+            const active = document.activeElement;
+            const inOwnForm = active === commandInputEl || active === searchInputEl;
+            const sel = term?.getSelection() ?? "";
+            if (!inOwnForm && sel.length > 0) {
+                e.preventDefault();
+                void copyToClipboard(sel);
+                return;
+            }
+        }
         if ((e.ctrlKey || e.metaKey) && e.key === "f") {
             e.preventDefault();
             openSearch();
