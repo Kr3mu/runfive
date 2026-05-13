@@ -686,6 +686,31 @@
         t.loadAddon(search);
         t.loadAddon(links);
         t.open(termHostEl);
+
+        // Intercept Ctrl+C / Cmd+C inside xterm's own key handler. xterm's
+        // helper textarea calls preventDefault on its keydown listener,
+        // which is why the wrapper-level `copy` event never fires for the
+        // keyboard shortcut (right-click → Copy still goes through the DOM
+        // copy event and hits the `oncopy` handler on the wrapper, so that
+        // path keeps working). attachCustomKeyEventHandler runs before
+        // xterm processes the key — returning false stops xterm from
+        // forwarding it any further. Recommended pattern from the xterm.js
+        // docs (see "Custom Key Event Handling").
+        t.attachCustomKeyEventHandler((event: KeyboardEvent): boolean => {
+            if (
+                event.type === "keydown" &&
+                (event.ctrlKey || event.metaKey) &&
+                (event.key === "c" || event.key === "C") &&
+                !event.shiftKey &&
+                !event.altKey
+            ) {
+                if (t.hasSelection()) {
+                    void copyToClipboard(t.getSelection());
+                    return false;
+                }
+            }
+            return true;
+        });
         // Run the initial fit before any writes so the renderer's
         // dimensions are populated — otherwise the first scrollToBottom
         // hits an undefined `dimensions` and throws.
