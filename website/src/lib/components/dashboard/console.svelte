@@ -618,23 +618,29 @@
         return ok;
     }
 
+    /**
+     * Browser copy-event interceptor. xterm's selection lives in the
+     * canvas cell grid — the focused element during Ctrl+C is xterm's
+     * (empty) helper textarea, so the browser's default would copy an
+     * empty string and clobber anything we'd written via the clipboard
+     * API on keydown. Hooking the copy event itself lets us replace
+     * the clipboard payload before the browser commits it, and also
+     * covers right-click → Copy and Edit-menu copy paths for free.
+     *
+     * Skips the override when focus is in our own form fields so the
+     * user's typed text — not a stale terminal selection — gets copied
+     * from the command field / search box.
+     */
+    function handleCopy(e: ClipboardEvent): void {
+        const active = document.activeElement;
+        if (active === commandInputEl || active === searchInputEl) return;
+        const sel = term?.getSelection() ?? "";
+        if (sel.length === 0) return;
+        e.clipboardData?.setData("text/plain", sel);
+        e.preventDefault();
+    }
+
     function handleKeydown(e: KeyboardEvent): void {
-        // Ctrl+C / Cmd+C: xterm's selection lives in the canvas cell grid,
-        // not the DOM, so the browser's default "copy selected text" is a
-        // no-op here. Read the selection out of the terminal API and write
-        // it to the clipboard ourselves. We skip when focus is in our own
-        // form fields (command field / search box) so the user's typed
-        // text — not a stale terminal selection — gets copied there.
-        if ((e.ctrlKey || e.metaKey) && (e.key === "c" || e.key === "C") && !e.shiftKey && !e.altKey) {
-            const active = document.activeElement;
-            const inOwnForm = active === commandInputEl || active === searchInputEl;
-            const sel = term?.getSelection() ?? "";
-            if (!inOwnForm && sel.length > 0) {
-                e.preventDefault();
-                void copyToClipboard(sel);
-                return;
-            }
-        }
         if ((e.ctrlKey || e.metaKey) && e.key === "f") {
             e.preventDefault();
             openSearch();
@@ -812,6 +818,7 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
     onkeydown={handleKeydown}
+    oncopy={handleCopy}
     class="relative flex h-full flex-col overflow-hidden bg-background"
     tabindex="-1"
     role="region"
